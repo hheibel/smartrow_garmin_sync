@@ -1,0 +1,67 @@
+name: Build and Deploy to Cloud Run Job
+
+# Trigger the workflow only on pushes to the main branch
+on:
+  push:
+    branches:
+      - main
+
+# Define environment variables (Update these with your specific GCP details)
+env:
+  PROJECT_ID: your-gcp-project-id            # e.g., web-scraper-bot-4192a
+  REGION: us-central1                        # e.g., us-central1
+  GAR_REPOSITORY: my-docker-repo             # Name of your Artifact Registry repository
+  JOB_NAME: my-python-scraper-job            # Name for your Cloud Run Job
+  # Workload Identity Federation details
+  WIF_PROVIDER: projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider
+  SERVICE_ACCOUNT: github-deployer@your-gcp-project-id.iam.gserviceaccount.com
+
+jobs:
+  deploy:
+    # Use Ubuntu runner
+    runs-on: ubuntu-latest
+
+    # These permissions are required for Workload Identity Federation to work
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Securely authenticate to Google Cloud without a JSON key
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+
+      # Configure Docker to use GCP Artifact Registry
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker Authentication
+        run: |-
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      # Build the Docker image and tag it with the GitHub commit SHA
+      - name: Build Docker Image
+        run: |-
+          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.JOB_NAME }}:${{ github.sha }} .
+
+      # Push the image to Google Artifact Registry
+      - name: Push Docker Image
+        run: |-
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.JOB_NAME }}:${{ github.sha }}
+
+      # Deploy / Update the Cloud Run Job
+      - name: Deploy Cloud Run Job
+        run: |-
+          gcloud run jobs deploy ${{ env.JOB_NAME }} \
+            --image ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.JOB_NAME }}:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --set-env-vars GCP_PROJECT_ID=${{ env.PROJECT_ID }} \
+            --max-retries 1 \
+            --task-timeout 10m

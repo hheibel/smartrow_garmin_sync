@@ -1,20 +1,21 @@
 name: Build and Deploy to Cloud Run Job
 
-# Trigger the workflow only on pushes to the main branch
+# Trigger the workflow on pushes to the main branch or manually via the GitHub UI
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 # Define environment variables (Update these with your specific GCP details)
 env:
-  PROJECT_ID: your-gcp-project-id            # e.g., web-scraper-bot-4192a
-  REGION: us-central1                        # e.g., us-central1
-  GAR_REPOSITORY: my-docker-repo             # Name of your Artifact Registry repository
-  JOB_NAME: my-python-scraper-job            # Name for your Cloud Run Job
+  PROJECT_ID: garmin-syncher-491619           # e.g., web-scraper-bot-4192a
+  REGION: europe-west3                        # e.g., us-central1
+  GAR_REPOSITORY: garmin-syncher-repository   # Name of your Artifact Registry repository
+  JOB_NAME: garmin-syncher-job                # Name for your Cloud Run Job
   # Workload Identity Federation details
-  WIF_PROVIDER: projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider
-  SERVICE_ACCOUNT: github-deployer@your-gcp-project-id.iam.gserviceaccount.com
+  WIF_PROVIDER: projects/28251301164/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider
+  SERVICE_ACCOUNT: github-deployer@garmin-syncher-491619.iam.gserviceaccount.com
 
 jobs:
   deploy:

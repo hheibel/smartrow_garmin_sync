@@ -9,6 +9,7 @@ on:
 
 # Define environment variables (Update these with your specific GCP details)
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true    # Forces GitHub Actions to run under Node 24
   PROJECT_ID: garmin-syncher-491619           # e.g., web-scraper-bot-4192a
   REGION: europe-west3                        # e.g., us-central1
   GAR_REPOSITORY: garmin-syncher-repository   # Name of your Artifact Registry repository

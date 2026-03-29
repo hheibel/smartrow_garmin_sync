@@ -98,10 +98,11 @@ def sync_smartrow_activities():
 
     for activity in new_activities:
         activity_id = activity.get('id')
+        public_id = activity.get('public_id')
         created_str = activity.get('created', '')
         
-        if not activity_id or not created_str:
-            logging.warning(f"Skipping activity due to missing id or created timestamp: {activity}")
+        if not activity_id or not created_str or not public_id:
+            logging.warning(f"Skipping activity due to missing id, public_id or created timestamp: {activity}")
             continue
             
         json_filename = format_filename(created_str, activity_id, "json")
@@ -112,16 +113,21 @@ def sync_smartrow_activities():
         
         # Fetch and Upload TCX
         try:
-            tcx_data = client.get_activity_tcx(activity_id)
+            tcx_data = client.get_activity_tcx(public_id)
             if tcx_data:
                 upload_to_gcs(bucket, tcx_filename, tcx_data, "application/vnd.garmin.tcx+xml")
             else:
                 logging.warning(f"No TCX data returned for activity {activity_id}.")
         except Exception as e:
-            logging.error(f"Failed to fetch or upload TCX for activity {activity_id}: {e}")
+            logging.error(f"Failed to fetch or upload TCX for activity {activity_id} (created date: {created_str}): {e}")
             # Continue processing next activities even if one TCX fails
             
         highest_synced = max(highest_synced, created_str)
+        
+    # Update the sync state file exactly once at the end.
+    # This prevents the GCS 1 object mutation per second rate limit issue on sync_state.json,
+    # and significantly reduces the number of Class A (write) operations, keeping you comfortably in the GCP Free Tier.
+    if highest_synced and highest_synced != last_synced:
         update_last_synced_time(bucket, highest_synced)
         
     logging.info("Sync process completed successfully.")

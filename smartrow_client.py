@@ -65,6 +65,14 @@ class SmartRowClient:
         """
         Fetches a list of public games.
         If not already logged in, it will perform login first.
+        
+        Returns a list of dictionaries. Some exemplary fields for each activity are:
+        - `id` (int): Internal SmartRow activity ID.
+        - `created` (str): Activity timestamp (e.g., "2026-03-05T06:53:50.807Z").
+        - `strava_id` (str): Linked Strava activity ID, if synced.
+        - `distance` (int): Total distance covered in meters.
+
+        For details, see github.com/hheibel/smartrow_garmin_sync/blob/main/docs/smartrow_activity.md
         """
         if not self.session:
             self._login()

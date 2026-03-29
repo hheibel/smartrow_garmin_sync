@@ -1,6 +1,7 @@
 import unittest
 import os
 from google.cloud import secretmanager
+from config import PROJECT_ID
 
 class TestSecretManager(unittest.TestCase):
     def test_access_test_password(self):
@@ -9,7 +10,7 @@ class TestSecretManager(unittest.TestCase):
         authenticate and retrieve the 'test-password' secret.
         """
         # We use the environment variable if available, otherwise default to the project ID
-        project_id = os.environ.get("PROJECT_ID", "garmin-syncher-491619")
+        project_id = PROJECT_ID
         
         try:
             client = secretmanager.SecretManagerServiceClient()

@@ -2,8 +2,7 @@ import os
 import requests
 from google.cloud import secretmanager
 
-# We will pass the GCP Project ID as an environment variable later
-PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
+from config import PROJECT_ID
 
 def access_secret_version(project_id, secret_id, version_id="latest"):
     """

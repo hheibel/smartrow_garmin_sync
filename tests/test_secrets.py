@@ -13,7 +13,7 @@ class TestSecretManager(unittest.TestCase):
         
         try:
             client = secretmanager.SecretManagerServiceClient()
-            name = f"projects/{project_id}/secrets/test-password/versions/latest"
+            name = f"projects/{project_id}/secrets/test-credentials/versions/latest"
             
             response = client.access_secret_version(request={"name": name})
             payload = response.payload.data.decode("UTF-8")

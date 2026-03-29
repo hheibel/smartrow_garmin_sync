@@ -1,7 +1,5 @@
 import unittest
-import os
-from google.cloud import secretmanager
-from config import PROJECT_ID
+from utils import access_secret_version
 
 class TestSecretManager(unittest.TestCase):
     def test_access_test_password(self):
@@ -9,18 +7,11 @@ class TestSecretManager(unittest.TestCase):
         Verifies that the Google Cloud Secret Manager client can successfully
         authenticate and retrieve the 'test-password' secret.
         """
-        # We use the environment variable if available, otherwise default to the project ID
-        project_id = PROJECT_ID
-        
         try:
-            client = secretmanager.SecretManagerServiceClient()
-            name = f"projects/{project_id}/secrets/test-credentials/versions/latest"
-            
-            response = client.access_secret_version(request={"name": name})
-            payload = response.payload.data.decode("UTF-8")
+            payload = access_secret_version("test-credentials")
             
             # Assert that we actually retrieved a non-empty string
-            self.assertTrue(len(payload) > 0, "The retrieved test password payload is empty.")
+            self.assertTrue(payload is not None and len(payload) > 0, "The retrieved test password payload is empty.")
             
         except Exception as e:
             self.fail(f"Failed to access the test-password secret. Error: {e}")

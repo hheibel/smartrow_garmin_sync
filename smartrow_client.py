@@ -1,16 +1,16 @@
 from typing import Any
 import requests
 import base64
+from utils import read_credentials
 
 class SmartRowClient:
     """
     A client for the SmartRow API.
     Handles authentication and data fetching.
     """
-    def __init__(self, username, password):
+    def __init__(self):
         self.base_url = "https://smartrow.fit"
-        self.username = username
-        self.password = password
+        self.username, self.password = read_credentials("smartrow-credentials")
         self.session = None 
     
     def _login(self):

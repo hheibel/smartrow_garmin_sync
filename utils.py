@@ -1,3 +1,21 @@
+from google.cloud import secretmanager
+from config import PROJECT_ID
+
+def access_secret_version(secret_id, version_id="latest"):
+    """
+    Accesses the payload for the given secret version using GCP Secret Manager.
+    """
+    client = secretmanager.SecretManagerServiceClient()
+    name = f"projects/{PROJECT_ID}/secrets/{secret_id}/versions/{version_id}"
+    
+    try:
+        response = client.access_secret_version(request={"name": name})
+        # Extract the payload as a string
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        print(f"Error retrieving secret {secret_id}: {e}")
+        return None
+
 def parse_credentials_payload(payload: str) -> tuple[str, str]:
     """
     Parses a multi-line string payload containing credentials.
@@ -31,3 +49,19 @@ def parse_credentials_payload(payload: str) -> tuple[str, str]:
         raise ValueError("Payload must contain both 'username:' and 'password:' keys.")
         
     return username, password
+
+def read_credentials(credential_secret_id: str) -> tuple[str, str]:
+    """
+    Retrieves and parses credentials from Google Cloud Secret Manager.
+    
+    Args:
+        credential_secret_id: The ID of the secret containing the credentials.
+        
+    Returns:
+        A tuple containing (username, password).
+        
+    Raises:
+        ValueError if the payload is missing a username or password.
+    """
+    payload = access_secret_version(credential_secret_id)
+    return parse_credentials_payload(payload)

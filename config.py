@@ -8,3 +8,4 @@ except ImportError:
 
 # Centralized Configuration Variables
 PROJECT_ID = os.environ.get("PROJECT_ID", "garmin-syncher-491619")
+GCS_BUCKET_NAME = os.environ.get("GCS_BUCKET_NAME", "smartrow-activities-sync")

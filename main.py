@@ -1,24 +1,7 @@
 import os
 import requests
-from google.cloud import secretmanager
 
-# We will pass the GCP Project ID as an environment variable later
-PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
-
-def access_secret_version(project_id, secret_id, version_id="latest"):
-    """
-    Accesses the payload for the given secret version using GCP Secret Manager.
-    """
-    client = secretmanager.SecretManagerServiceClient()
-    name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
-    
-    try:
-        response = client.access_secret_version(request={"name": name})
-        # Extract the payload as a string
-        return response.payload.data.decode("UTF-8")
-    except Exception as e:
-        print(f"Error retrieving secret {secret_id}: {e}")
-        return None
+from utils import access_secret_version
 
 def main():
     print("Starting automated web task...")

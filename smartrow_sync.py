@@ -6,6 +6,7 @@ from google.cloud import storage
 
 from config import PROJECT_ID, GCS_BUCKET_NAME
 from smartrow_client import SmartRowClient
+from fit_utils import convert_to_fit
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -48,8 +49,8 @@ def format_filename(created_str: str, activity_id: int, extension: str) -> str:
         
     return f"{prefix}_{activity_id}.{extension}"
 
-def upload_to_gcs(bucket, filename: str, content: str, content_type: str):
-    """Uploads string content to a GCS bucket."""
+def upload_to_gcs(bucket, filename: str, content: bytes | str, content_type: str):
+    """Uploads string or binary content to a GCS bucket."""
     blob = bucket.blob(filename)
     blob.upload_from_string(content, content_type=content_type)
     logging.info(f"Uploaded {filename} to gs://{bucket.name}/")
@@ -111,11 +112,21 @@ def sync_smartrow_activities():
         # Upload JSON
         upload_to_gcs(bucket, json_filename, json.dumps(activity, indent=2), "application/json")
         
-        # Fetch and Upload TCX
+        # Fetch and Upload TCX & FIT
         try:
             tcx_data = client.get_activity_tcx(public_id)
             if tcx_data:
+                # 1. Upload TCX
                 upload_to_gcs(bucket, tcx_filename, tcx_data, "application/vnd.garmin.tcx+xml")
+                
+                # 2. Convert to FIT and Upload
+                try:
+                    fit_file = convert_to_fit(tcx_data)
+                    fit_data = fit_file.to_bytes()
+                    fit_filename = format_filename(created_str, activity_id, "fit")
+                    upload_to_gcs(bucket, fit_filename, fit_data, "application/octet-stream")
+                except Exception as fit_err:
+                    logging.error(f"Failed to convert or upload FIT for activity {activity_id}: {fit_err}")
             else:
                 logging.warning(f"No TCX data returned for activity {activity_id}.")
         except Exception as e:

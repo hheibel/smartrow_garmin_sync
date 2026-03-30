@@ -1,6 +1,7 @@
 from typing import Any
 import requests
 import base64
+import logging
 from utils import read_credentials
 
 class SmartRowClient:
@@ -54,8 +55,7 @@ class SmartRowClient:
             login_response.raise_for_status()
         except requests.exceptions.RequestException as e:
             print(f"Login failed: {e}")
-            if e.response is not None:
-                print(f"Response Body: {e.response.text}")
+            print("The server rejected the login request. Please verify your credentials.")
             raise  # Re-raise the exception
 
         self.session = session
@@ -65,6 +65,14 @@ class SmartRowClient:
         """
         Fetches a list of public games.
         If not already logged in, it will perform login first.
+        
+        Returns a list of dictionaries. Some exemplary fields for each activity are:
+        - `id` (int): Internal SmartRow activity ID.
+        - `created` (str): Activity timestamp (e.g., "2026-03-05T06:53:50.807Z").
+        - `strava_id` (str): Linked Strava activity ID, if synced.
+        - `distance` (int): Total distance covered in meters.
+
+        For details, see github.com/hheibel/smartrow_garmin_sync/blob/main/docs/smartrow_activity.md
         """
         if not self.session:
             self._login()
@@ -78,20 +86,19 @@ class SmartRowClient:
 
         except requests.exceptions.RequestException as e:
             print(f"Failed to fetch activities: {e}")
-            if e.response is not None:
-                print(f"Response Body: {e.response.text}")
+            print("The server responded with an error while fetching the activity list.")
             raise
 
 
-    def get_activity_tcx(self, activity_id: int) -> str:
+    def get_activity_tcx(self, public_id: str) -> str:
         """
-        Fetches detailed information about a specific activity by its ID.
+        Fetches detailed information about a specific activity by its public ID.
         If not already logged in, it will perform login first.
         """
         if not self.session:
             self._login()
 
-        activity_details_url = f"{self.base_url}/api/export/tcx/{activity_id}"
+        activity_details_url = f"{self.base_url}/api/export/tcx/{public_id}"
 
         try:
             details_response = self.session.get(activity_details_url)
@@ -99,7 +106,6 @@ class SmartRowClient:
             return details_response.text  # Return the TCX data as a string
 
         except requests.exceptions.RequestException as e:
-            print(f"Failed to fetch activity details for ID {activity_id}: {e}")
-            if e.response is not None:
-                print(f"Response Body: {e.response.text}")
+            logging.info(f"Failed to fetch activity details for public ID {public_id}: {e}")
+            logging.debug("The server responded with an error, possibly because the activity has no associated TCX data.")
             raise

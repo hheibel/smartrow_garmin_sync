@@ -143,9 +143,9 @@ class TestSmartRowSync(unittest.TestCase):
         mock_smartrow_client = MagicMock()
         mock_client_class.return_value = mock_smartrow_client
         mock_smartrow_client.get_activities.return_value = [
-            {"id": 1, "created": "2026-02-01T00:00:00Z"}, # Old, should be skipped
-            {"id": 2, "created": "2026-03-02T10:00:00Z"}, # New
-            {"id": 3, "created": "2026-03-05T06:53:50.807Z"}  # Newest
+            {"id": 1, "public_id": "uuid-1", "created": "2026-02-01T00:00:00Z"}, # Old, should be skipped
+            {"id": 2, "public_id": "uuid-2", "created": "2026-03-02T10:00:00Z"}, # New
+            {"id": 3, "public_id": "uuid-3", "created": "2026-03-05T06:53:50.807Z"}  # Newest
         ]
         mock_smartrow_client.get_activity_tcx.return_value = "<tcx>data</tcx>"
         
@@ -161,9 +161,9 @@ class TestSmartRowSync(unittest.TestCase):
         # So it should upload id 2 and id 3. JSON + TCX for each -> 4 uploads
         self.assertEqual(mock_upload_to_gcs.call_count, 4)
         
-        # Verify it fetched TCX for id 2 and id 3
-        mock_smartrow_client.get_activity_tcx.assert_any_call(2)
-        mock_smartrow_client.get_activity_tcx.assert_any_call(3)
+        # Verify it fetched TCX for id 2 and id 3 using their public_ids
+        mock_smartrow_client.get_activity_tcx.assert_any_call("uuid-2")
+        mock_smartrow_client.get_activity_tcx.assert_any_call("uuid-3")
         self.assertEqual(mock_smartrow_client.get_activity_tcx.call_count, 2)
         
         # Verify last synced time was updated with the newest item's timestamp

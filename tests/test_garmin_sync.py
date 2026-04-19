@@ -6,9 +6,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock
 
 # Mock google.cloud before importing garmin_sync
-sys.modules['google.cloud'] = MagicMock()
-sys.modules['google.cloud.storage'] = MagicMock()
-sys.modules['garminconnect'] = MagicMock()
+
 
 from garmin_sync import (
     get_last_garmin_sync_time,

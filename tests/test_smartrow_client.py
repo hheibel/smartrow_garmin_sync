@@ -4,8 +4,6 @@ from unittest.mock import patch, MagicMock
 import requests
 
 # Mock google.cloud modules so that tests can run without having them installed
-sys.modules['google.cloud'] = MagicMock()
-sys.modules['google.cloud.secretmanager'] = MagicMock()
 
 from smartrow_client import SmartRowClient
 

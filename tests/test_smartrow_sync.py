@@ -6,8 +6,6 @@ from unittest.mock import patch, MagicMock
 
 import sys
 # Mock google.cloud before importing smartrow_sync
-sys.modules['google.cloud'] = MagicMock()
-sys.modules['google.cloud.storage'] = MagicMock()
 
 from smartrow_sync import (
     get_last_synced_time,

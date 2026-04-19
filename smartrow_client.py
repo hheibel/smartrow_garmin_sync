@@ -59,7 +59,7 @@ class SmartRowClient:
             raise  # Re-raise the exception
 
         self.session = session
-    
+
 
     def get_activities(self) -> Any:
         """
@@ -94,6 +94,9 @@ class SmartRowClient:
         """
         Fetches detailed information about a specific activity by its public ID.
         If not already logged in, it will perform login first.
+        
+        CRITICAL: This function requires the `public_id` of the activity (e.g., "d8f8a8b...af38").
+        Do NOT pass the standard integer `id` of the activity! Using the integer `id` will fail.
         """
         if not self.session:
             self._login()

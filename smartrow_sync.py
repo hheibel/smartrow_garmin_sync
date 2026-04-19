@@ -140,5 +140,5 @@ def sync_smartrow_activities():
     # and significantly reduces the number of Class A (write) operations, keeping you comfortably in the GCP Free Tier.
     if highest_synced and highest_synced != last_synced:
         update_last_synced_time(bucket, highest_synced)
-        
+
     logging.info("Sync process completed successfully.")

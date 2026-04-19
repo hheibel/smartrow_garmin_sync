@@ -16,7 +16,9 @@ def access_secret_version(secret_id: str, version_id: str = "latest") -> str | N
     try:
         response = client.access_secret_version(request={"name": name})
         # Extract the payload as a string
-        return response.payload.data.decode("UTF-8")
+        payload = response.payload.data.decode("UTF-8")
+        logging.debug(f"Successfully accessed secret {secret_id} with payload length {len(payload)}.")
+        return payload
     except Exception as e:
         logging.error(f"Error retrieving secret {secret_id}: {e}")
         return None

@@ -18,7 +18,7 @@ def access_secret_version(secret_id: str, version_id: str = "latest") -> str | N
         # Extract the payload as a string
         return response.payload.data.decode("UTF-8")
     except Exception as e:
-        print(f"Error retrieving secret {secret_id}: {e}")
+        logging.error(f"Error retrieving secret {secret_id}: {e}")
         return None
 
 def parse_credentials_payload(payload: str) -> tuple[str, str]:

@@ -1,7 +1,7 @@
 from typing import Any
 import requests
 import base64
-import logging
+from absl import logging
 from utils import read_credentials
 
 class SmartRowClient:
@@ -9,12 +9,12 @@ class SmartRowClient:
     A client for the SmartRow API.
     Handles authentication and data fetching.
     """
-    def __init__(self):
+    def __init__(self) -> None:
         self.base_url = "https://smartrow.fit"
         self.username, self.password = read_credentials("smartrow-credentials")
-        self.session = None 
+        self.session: requests.Session | None = None 
     
-    def _login(self):
+    def _login(self) -> None:
         """
         Logs in to the website, retrieves a session cookie, and stores the session.
         This method is called automatically when needed.
@@ -59,9 +59,9 @@ class SmartRowClient:
             raise  # Re-raise the exception
 
         self.session = session
-    
 
-    def get_activities(self) -> Any:
+
+    def get_activities(self) -> list[dict[str, Any]]:
         """
         Fetches a list of public games.
         If not already logged in, it will perform login first.
@@ -94,6 +94,9 @@ class SmartRowClient:
         """
         Fetches detailed information about a specific activity by its public ID.
         If not already logged in, it will perform login first.
+        
+        CRITICAL: This function requires the `public_id` of the activity (e.g., "d8f8a8b...af38").
+        Do NOT pass the standard integer `id` of the activity! Using the integer `id` will fail.
         """
         if not self.session:
             self._login()

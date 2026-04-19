@@ -1,17 +1,18 @@
 import os
 import json
-import logging
+from absl import logging
 from datetime import datetime
 from google.cloud import storage
 
 from config import PROJECT_ID, GCS_BUCKET_NAME
 from smartrow_client import SmartRowClient
+from fit_utils import convert_to_fit
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 SYNC_STATE_FILE = "sync_state.json"
 
-def get_last_synced_time(bucket) -> str:
+def get_last_synced_time(bucket: storage.Bucket) -> str:
     """Read the last synced activity creation time from the GCS state file."""
     blob = bucket.blob(SYNC_STATE_FILE)
     if blob.exists():
@@ -23,7 +24,7 @@ def get_last_synced_time(bucket) -> str:
             logging.warning(f"Failed to parse sync state file from GCS: {e}. Treating as empty.")
     return ""
 
-def update_last_synced_time(bucket, last_synced_created: str):
+def update_last_synced_time(bucket: storage.Bucket, last_synced_created: str) -> None:
     """Update the GCS state file with the newest synced activity time."""
     blob = bucket.blob(SYNC_STATE_FILE)
     blob.upload_from_string(
@@ -48,13 +49,13 @@ def format_filename(created_str: str, activity_id: int, extension: str) -> str:
         
     return f"{prefix}_{activity_id}.{extension}"
 
-def upload_to_gcs(bucket, filename: str, content: str, content_type: str):
-    """Uploads string content to a GCS bucket."""
+def upload_to_gcs(bucket: storage.Bucket, filename: str, content: bytes | str, content_type: str) -> None:
+    """Uploads string or binary content to a GCS bucket."""
     blob = bucket.blob(filename)
     blob.upload_from_string(content, content_type=content_type)
     logging.info(f"Uploaded {filename} to gs://{bucket.name}/")
 
-def sync_smartrow_activities():
+def sync_smartrow_activities() -> None:
     """Main execution function to sync SmartRow activities to GCS."""
     logging.info("Starting SmartRow sync process...")
     
@@ -111,11 +112,21 @@ def sync_smartrow_activities():
         # Upload JSON
         upload_to_gcs(bucket, json_filename, json.dumps(activity, indent=2), "application/json")
         
-        # Fetch and Upload TCX
+        # Fetch and Upload TCX & FIT
         try:
             tcx_data = client.get_activity_tcx(public_id)
             if tcx_data:
+                # 1. Upload TCX
                 upload_to_gcs(bucket, tcx_filename, tcx_data, "application/vnd.garmin.tcx+xml")
+                
+                # 2. Convert to FIT and Upload
+                try:
+                    fit_file = convert_to_fit(tcx_data)
+                    fit_data = fit_file.to_bytes()
+                    fit_filename = format_filename(created_str, activity_id, "fit")
+                    upload_to_gcs(bucket, fit_filename, fit_data, "application/octet-stream")
+                except Exception as fit_err:
+                    logging.error(f"Failed to convert or upload FIT for activity {activity_id}: {fit_err}")
             else:
                 logging.warning(f"No TCX data returned for activity {activity_id}.")
         except Exception as e:
@@ -129,5 +140,5 @@ def sync_smartrow_activities():
     # and significantly reduces the number of Class A (write) operations, keeping you comfortably in the GCP Free Tier.
     if highest_synced and highest_synced != last_synced:
         update_last_synced_time(bucket, highest_synced)
-        
+
     logging.info("Sync process completed successfully.")

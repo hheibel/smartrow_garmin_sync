@@ -4,8 +4,6 @@ from unittest.mock import patch, MagicMock
 import requests
 
 # Mock google.cloud modules so that tests can run without having them installed
-sys.modules['google.cloud'] = MagicMock()
-sys.modules['google.cloud.secretmanager'] = MagicMock()
 
 from smartrow_client import SmartRowClient
 
@@ -16,7 +14,7 @@ class TestSmartRowClient(unittest.TestCase):
     """
 
     @patch('smartrow_client.read_credentials')
-    def test_init(self, mock_read_credentials):
+    def test_init(self, mock_read_credentials) -> None:
         """
         Test the initialization of SmartRowClient.
         
@@ -35,7 +33,7 @@ class TestSmartRowClient(unittest.TestCase):
 
     @patch('smartrow_client.read_credentials')
     @patch('smartrow_client.requests.Session')
-    def test_login_success(self, mock_session_class, mock_read_credentials):
+    def test_login_success(self, mock_session_class, mock_read_credentials) -> None:
         """
         Test successful login behavior.
         
@@ -66,7 +64,7 @@ class TestSmartRowClient(unittest.TestCase):
 
     @patch('smartrow_client.read_credentials')
     @patch('smartrow_client.requests.Session')
-    def test_login_failure(self, mock_session_class, mock_read_credentials):
+    def test_login_failure(self, mock_session_class, mock_read_credentials) -> None:
         """
         Test failure handling during login.
         
@@ -88,7 +86,7 @@ class TestSmartRowClient(unittest.TestCase):
             client._login()
             
     @patch('smartrow_client.read_credentials')
-    def test_get_activities(self, mock_read_credentials):
+    def test_get_activities(self, mock_read_credentials) -> None:
         """
         Test retrieving the summary feed of public game activities.
         
@@ -113,7 +111,7 @@ class TestSmartRowClient(unittest.TestCase):
         client.session.get.assert_called_once_with("https://smartrow.fit/api/public-game")
 
     @patch('smartrow_client.read_credentials')
-    def test_get_activity_tcx(self, mock_read_credentials):
+    def test_get_activity_tcx(self, mock_read_credentials) -> None:
         """
         Test retrieving a single activity payload exported as TCX format.
         

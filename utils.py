@@ -1,8 +1,10 @@
 import os
-import logging
+import tempfile
+from absl import logging
 from garminconnect import Garmin
 from google.cloud import secretmanager
-from config import PROJECT_ID
+from google.cloud import storage
+from config import PROJECT_ID, GCS_BUCKET_NAME
 
 def access_secret_version(secret_id: str, version_id: str = "latest") -> str | None:
     """
@@ -77,21 +79,37 @@ def init_garmin_client() -> Garmin:
     """
     username, password = read_credentials("garmin-credentials")
     
-    tokenstore = os.path.normpath(os.path.expanduser("~/.garminconnect"))
+    storage_client = storage.Client(project=PROJECT_ID)
+    bucket = storage_client.bucket(GCS_BUCKET_NAME)
+    token_blob = bucket.blob("garmin_tokenstore/garmin_tokens.json")
     
-    try:
-        # Try to initialize the client using saved session tokens FIRST
-        client = Garmin(email=username, password=password)
-        client.login(tokenstore)
-        logging.info(f"Logged in to Garmin using cached tokens from {tokenstore}")
-    except Exception as e:
-        logging.warning(f"Token login failed: {e}. Falling back to standard login.")
-        # If tokens don't exist or expired, login manually
-        client = Garmin(email=username, password=password)
-        client.login()
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # Naming it .json ensures the library creates it as a file, not a directory
+        tokenstore = os.path.join(tmp_dir, "garmin_tokens.json")
         
-        # Save the tokens immediately for the next time!
-        client.garth.dump(tokenstore)
-        logging.info(f"Logged in and saved new tokens to {tokenstore}")
+        # We only download if the blob exists on GCS and we either do not have a local file
+        # or the local file is empty (e.g. due to a previous failed download)
+        if token_blob.exists() and (not os.path.isfile(tokenstore) or os.path.getsize(tokenstore) == 0):
+            logging.info("Tokenstore does not exist locally, downloading from GCS.")
+            token_blob.download_to_filename(tokenstore)
+            logging.info("Downloaded Garmin tokens from GCS.")
+        
+        try:
+            # Try to initialize the client using saved session tokens FIRST
+            client = Garmin(email=username, password=password)
+            client.login(tokenstore)
+            logging.info("Logged in to Garmin using cached tokens from GCS.")
+        except Exception as e:
+            logging.warning(f"Token login failed: {e}. Falling back to standard login.")
+            # If tokens don't exist or expired, login manually
+            client = Garmin(email=username, password=password)
+            client.login()
+            
+            # Save the tokens immediately for the next time!
+            logging.info("Logged in successfully, saving tokens to temp file %s and to GCS.", tokenstore)
+            client.client.dump(tokenstore)
+            
+            token_blob.upload_from_filename(tokenstore)
+            logging.info("Logged in and uploaded new tokens to GCS.")
 
     return client

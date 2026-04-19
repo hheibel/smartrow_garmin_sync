@@ -1,6 +1,6 @@
 import os
 import json
-import logging
+from absl import logging
 from datetime import datetime
 from google.cloud import storage
 
@@ -8,7 +8,7 @@ from config import PROJECT_ID, GCS_BUCKET_NAME
 from smartrow_client import SmartRowClient
 from fit_utils import convert_to_fit
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 SYNC_STATE_FILE = "sync_state.json"
 

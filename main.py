@@ -1,8 +1,9 @@
-import logging
+from absl import app
+from absl import logging
 from smartrow_sync import sync_smartrow_activities
 from garmin_sync import sync_to_garmin
 
-def main() -> None:
+def main(argv) -> None:
     """
     Main entrypoint for the garmin-syncher application.
     - Synchronizes SmartRow activities into Google Cloud Storage.
@@ -22,4 +23,4 @@ def main() -> None:
         logging.error(f"An unexpected error occurred during execution: {e}")
         
 if __name__ == "__main__":
-    main()
+    app.run(main)

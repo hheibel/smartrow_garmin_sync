@@ -1,6 +1,6 @@
 import unittest
 import json
-import logging
+from absl import logging
 import sys
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock
@@ -26,10 +26,10 @@ class TestGarminSync(unittest.TestCase):
     
     def setUp(self) -> None:
         # Disable logging output during tests
-        logging.disable(logging.CRITICAL)
+        logging.set_verbosity(logging.FATAL)
 
     def tearDown(self) -> None:
-        logging.disable(logging.NOTSET)
+        logging.set_verbosity(logging.INFO)
 
     def test_get_last_garmin_sync_time_exists(self) -> None:
         mock_bucket = MagicMock()

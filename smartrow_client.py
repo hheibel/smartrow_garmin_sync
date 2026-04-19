@@ -1,7 +1,7 @@
 from typing import Any
 import requests
 import base64
-import logging
+from absl import logging
 from utils import read_credentials
 
 class SmartRowClient:

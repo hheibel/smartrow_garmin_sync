@@ -1,6 +1,8 @@
 import json
-import logging
+from absl import logging
 import io
+import os
+import tempfile
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 from typing import Any
@@ -10,7 +12,7 @@ from garminconnect import Garmin
 from config import PROJECT_ID, GCS_BUCKET_NAME
 from utils import init_garmin_client
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 GARMIN_SYNC_STATE_FILE = "garmin_sync_state.json"
 
@@ -186,25 +188,26 @@ def sync_to_garmin() -> None:
     
     highest_synced_dt = last_synced_dt
     
-    for activity in activities:
-        logging.info(f"Syncing activity file {activity.fit_file} to Garmin...")
-        try:
-            blob = bucket.blob(activity.fit_file)
-            if not blob.exists():
-                logging.warning(f"File {activity.fit_file} not found in GCS.")
-                continue
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        for activity in activities:
+            logging.info(f"Syncing activity file {activity.fit_file} to Garmin...")
+            try:
+                blob = bucket.blob(activity.fit_file)
+                if not blob.exists():
+                    logging.warning(f"File {activity.fit_file} not found in GCS.")
+                    continue
+                    
+                # Download FIT file content
+                local_fit_path = os.path.join(tmp_dir, activity.fit_file)
+                blob.download_to_filename(local_fit_path)
                 
-            # Download FIT file content
-            fit_content = blob.download_as_bytes()
-            file_stream = io.BytesIO(fit_content)
-            
-            client.upload_activity(file_stream)
-            logging.info(f"Successfully uploaded {activity.fit_file} to Garmin.")
-            
-            highest_synced_dt = max(highest_synced_dt, activity.created)
-            
-        except Exception as e:
-            logging.error(f"Failed to upload {activity.fit_file} to Garmin: {e}")
+                client.upload_activity(local_fit_path)
+                logging.info(f"Successfully uploaded {activity.fit_file} to Garmin.")
+                
+                highest_synced_dt = max(highest_synced_dt, activity.created)
+                
+            except Exception as e:
+                logging.error(f"Failed to upload {activity.fit_file} to Garmin: {e}")
             
     # Update the state file in GCS
     if highest_synced_dt > last_synced_dt:

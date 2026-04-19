@@ -14,7 +14,7 @@ class TestSmartRowIntegration(unittest.TestCase):
     These tests require a valid gcloud login and access to GCP secrets.
     """
 
-    def setUp(self):
+    def setUp(self) -> None:
         """
         Verify that we have logged in via gcloud first.
         """
@@ -28,7 +28,7 @@ class TestSmartRowIntegration(unittest.TestCase):
         if result.returncode != 0:
             self.fail(f"gcloud authentication failed or gcloud not found. Please assure you have logged in via gcloud.\nError output:\n{result.stderr}")
 
-    def test_smartrow_download_last_5_tcx(self):
+    def test_smartrow_download_last_5_tcx(self) -> None:
         """
         Test that we can authenticate, fetch activities, and download the last 5 TCX files.
         """

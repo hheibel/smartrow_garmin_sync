@@ -9,12 +9,12 @@ class SmartRowClient:
     A client for the SmartRow API.
     Handles authentication and data fetching.
     """
-    def __init__(self):
+    def __init__(self) -> None:
         self.base_url = "https://smartrow.fit"
         self.username, self.password = read_credentials("smartrow-credentials")
-        self.session = None 
+        self.session: requests.Session | None = None 
     
-    def _login(self):
+    def _login(self) -> None:
         """
         Logs in to the website, retrieves a session cookie, and stores the session.
         This method is called automatically when needed.
@@ -61,7 +61,7 @@ class SmartRowClient:
         self.session = session
 
 
-    def get_activities(self) -> Any:
+    def get_activities(self) -> list[dict[str, Any]]:
         """
         Fetches a list of public games.
         If not already logged in, it will perform login first.

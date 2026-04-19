@@ -24,14 +24,14 @@ class TestSmartRowSync(unittest.TestCase):
     and accurately tracking and uploading new activities.
     """
     
-    def setUp(self):
+    def setUp(self) -> None:
         # Disable logging output during tests
         logging.disable(logging.CRITICAL)
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         logging.disable(logging.NOTSET)
 
-    def test_get_last_synced_time_exists(self):
+    def test_get_last_synced_time_exists(self) -> None:
         """
         Test retrieving the last synced time when the state file exists in GCS.
         Verifies that it reads the JSON content and extracts the timestamp correctly.
@@ -46,7 +46,7 @@ class TestSmartRowSync(unittest.TestCase):
         self.assertEqual(result, "2026-03-05T06:53:50.807Z")
         mock_bucket.blob.assert_called_once_with(SYNC_STATE_FILE)
 
-    def test_get_last_synced_time_not_exists(self):
+    def test_get_last_synced_time_not_exists(self) -> None:
         """
         Test retrieving the last synced time when the state file is missing from GCS.
         Verifies that it correctly defaults to an empty string.
@@ -59,7 +59,7 @@ class TestSmartRowSync(unittest.TestCase):
         result = get_last_synced_time(mock_bucket)
         self.assertEqual(result, "")
 
-    def test_update_last_synced_time(self):
+    def test_update_last_synced_time(self) -> None:
         """
         Test updating the synced time state.
         Verifies that a valid JSON payload is constructed and uploaded to the GCS blob.
@@ -76,7 +76,7 @@ class TestSmartRowSync(unittest.TestCase):
         self.assertIn('"last_synced_created": "2026-03-06T12:00:00Z"', args[0])
         self.assertEqual(kwargs['content_type'], "application/json")
 
-    def test_format_filename_with_millis(self):
+    def test_format_filename_with_millis(self) -> None:
         """
         Test formatting filenames for timestamps that include milliseconds.
         Verifies that ISO 8601 strings are correctly parsed into the concise chronological format.
@@ -84,7 +84,7 @@ class TestSmartRowSync(unittest.TestCase):
         filename = format_filename("2026-03-05T06:53:50.807Z", 1234, "json")
         self.assertEqual(filename, "20260305_065350_1234.json")
 
-    def test_format_filename_without_millis(self):
+    def test_format_filename_without_millis(self) -> None:
         """
         Test formatting filenames for strict ISO timestamps lacking milliseconds.
         Verifies fallback timestamp formatting works properly.
@@ -92,7 +92,7 @@ class TestSmartRowSync(unittest.TestCase):
         filename = format_filename("2026-03-05T06:53:50Z", 5678, "tcx")
         self.assertEqual(filename, "20260305_065350_5678.tcx")
 
-    def test_timestamp_ordering_and_sorting(self):
+    def test_timestamp_ordering_and_sorting(self) -> None:
         """
         Verify that string comparison accurately reflects chronological ordering
         for ISO 8601 timestamps.
@@ -129,7 +129,7 @@ class TestSmartRowSync(unittest.TestCase):
     @patch('smartrow_sync.storage.Client')
     @patch('smartrow_sync.SmartRowClient')
     @patch('smartrow_sync.get_last_synced_time')
-    def test_sync_smartrow_activities(self, mock_get_last_synced, mock_client_class, mock_storage_client_class, mock_upload_to_gcs, mock_update_last_synced, mock_convert_to_fit):
+    def test_sync_smartrow_activities(self, mock_get_last_synced, mock_client_class, mock_storage_client_class, mock_upload_to_gcs, mock_update_last_synced, mock_convert_to_fit) -> None:
         """
         Test the main synchronization loop for SmartRow activities.
         

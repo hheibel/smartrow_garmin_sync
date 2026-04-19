@@ -2,7 +2,7 @@ import logging
 from smartrow_sync import sync_smartrow_activities
 from garmin_sync import sync_to_garmin
 
-def main():
+def main() -> None:
     """
     Main entrypoint for the garmin-syncher application.
     - Synchronizes SmartRow activities into Google Cloud Storage.

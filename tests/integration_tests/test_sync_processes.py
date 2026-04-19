@@ -13,7 +13,7 @@ from smartrow_client import SmartRowClient
 from fake_gcs import FakeStorageClient
 
 class TestSyncSmartRowActivities(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         """
         Verify that we have logged in via gcloud first.
         """
@@ -32,7 +32,7 @@ class TestSyncSmartRowActivities(unittest.TestCase):
         os.makedirs(self.mock_gcs_root, exist_ok=True)
 
     @patch('smartrow_sync.storage.Client')
-    def test_sync_smartrow_activities_limits_to_10(self, mock_storage_client_cls):
+    def test_sync_smartrow_activities_limits_to_10(self, mock_storage_client_cls) -> None:
         """
         Test that sync_smartrow_activities processes at most the last 10 workouts.
         We seed the local mock GCS sync_state.json with the timestamp of the 11th from last activity.

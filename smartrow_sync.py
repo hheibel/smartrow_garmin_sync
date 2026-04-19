@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 SYNC_STATE_FILE = "sync_state.json"
 
-def get_last_synced_time(bucket) -> str:
+def get_last_synced_time(bucket: storage.Bucket) -> str:
     """Read the last synced activity creation time from the GCS state file."""
     blob = bucket.blob(SYNC_STATE_FILE)
     if blob.exists():
@@ -24,7 +24,7 @@ def get_last_synced_time(bucket) -> str:
             logging.warning(f"Failed to parse sync state file from GCS: {e}. Treating as empty.")
     return ""
 
-def update_last_synced_time(bucket, last_synced_created: str):
+def update_last_synced_time(bucket: storage.Bucket, last_synced_created: str) -> None:
     """Update the GCS state file with the newest synced activity time."""
     blob = bucket.blob(SYNC_STATE_FILE)
     blob.upload_from_string(
@@ -49,13 +49,13 @@ def format_filename(created_str: str, activity_id: int, extension: str) -> str:
         
     return f"{prefix}_{activity_id}.{extension}"
 
-def upload_to_gcs(bucket, filename: str, content: bytes | str, content_type: str):
+def upload_to_gcs(bucket: storage.Bucket, filename: str, content: bytes | str, content_type: str) -> None:
     """Uploads string or binary content to a GCS bucket."""
     blob = bucket.blob(filename)
     blob.upload_from_string(content, content_type=content_type)
     logging.info(f"Uploaded {filename} to gs://{bucket.name}/")
 
-def sync_smartrow_activities():
+def sync_smartrow_activities() -> None:
     """Main execution function to sync SmartRow activities to GCS."""
     logging.info("Starting SmartRow sync process...")
     

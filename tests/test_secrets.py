@@ -2,7 +2,7 @@ import unittest
 from utils import access_secret_version
 
 class TestSecretManager(unittest.TestCase):
-    def test_access_test_password(self):
+    def test_access_test_password(self) -> None:
         """
         Verifies that the Google Cloud Secret Manager client can successfully
         authenticate and retrieve the 'test-password' secret.

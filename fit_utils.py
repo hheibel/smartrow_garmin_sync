@@ -19,7 +19,7 @@ NS = {
     'ax': 'http://www.garmin.com/xmlschemas/ActivityExtension/v2'
 }
 
-def extract_time(trackpoint_element) -> Optional[int]:
+def extract_time(trackpoint_element: ET.Element) -> int | None:
     """
     Extracts time from a Trackpoint element and returns it as a Garmin timestamp (ms).
     Returns None if no Time element is found.
@@ -29,7 +29,7 @@ def extract_time(trackpoint_element) -> Optional[int]:
         return parse_iso_time_ms(time_element.text)
     return None
 
-def extract_watts(trackpoint_element) -> Optional[int]:
+def extract_watts(trackpoint_element: ET.Element) -> int | None:
     """
     Attempts to read watts from a Trackpoint element.
     Returns None if no watt data is available.
@@ -45,7 +45,7 @@ def extract_watts(trackpoint_element) -> Optional[int]:
     return None
 
 
-def parse_iso_time_ms(iso_str) -> int:
+def parse_iso_time_ms(iso_str: str) -> int:
     """Converts TCX time (e.g., 2023-10-25T18:00:00Z) into Garmin Timestamp (ms)"""
     # Remove Z because fromisoformat in older Python versions might have issues with it.
     # We assume TCX times are always UTC.
@@ -221,7 +221,7 @@ def convert_to_fit(tcx_string: str) -> FitFile:
     return builder.build()
 
 
-def save_fit_file(fit_file: FitFile, output_path: str):
+def save_fit_file(fit_file: FitFile, output_path: str) -> None:
     with open(output_path, 'wb') as fit_output:
         fit_file.write(fit_output)
     print(f"Done! File saved as: {output_path}")

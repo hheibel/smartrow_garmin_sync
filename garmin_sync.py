@@ -2,17 +2,36 @@ import json
 import logging
 import io
 from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
+from typing import Any
 from google.cloud import storage
 from garminconnect import Garmin
 
 from config import PROJECT_ID, GCS_BUCKET_NAME
-from utils import read_credentials
+from utils import init_garmin_client
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 GARMIN_SYNC_STATE_FILE = "garmin_sync_state.json"
 
-def get_last_garmin_sync_time(bucket) -> str:
+@dataclass
+class ActivityData:
+    base_name: str
+    created: datetime  # Derived solely from the filename timestamp
+    
+    @property
+    def fit_file(self) -> str:
+        return f"{self.base_name}.fit"
+        
+    @property
+    def json_file(self) -> str:
+        return f"{self.base_name}.json"
+        
+    @property
+    def tcx_file(self) -> str:
+        return f"{self.base_name}.tcx"
+
+def get_last_garmin_sync_time(bucket: storage.Bucket) -> str:
     """Read the last synced activity creation time from the GCS state file for Garmin."""
     blob = bucket.blob(GARMIN_SYNC_STATE_FILE)
     if blob.exists():
@@ -24,7 +43,7 @@ def get_last_garmin_sync_time(bucket) -> str:
             logging.warning(f"Failed to parse Garmin sync state file from GCS: {e}. Treating as empty.")
     return ""
 
-def update_last_garmin_sync_time(bucket, last_synced_created: str):
+def update_last_garmin_sync_time(bucket: storage.Bucket, last_synced_created: str) -> None:
     """Update the GCS state file with the newest synced activity time for Garmin."""
     blob = bucket.blob(GARMIN_SYNC_STATE_FILE)
     blob.upload_from_string(
@@ -46,18 +65,79 @@ def parse_date_from_filename(filename: str) -> datetime:
         logging.error(f"Failed to parse date from filename '{filename}': {e}")
         return datetime.min.replace(tzinfo=timezone.utc)
 
-def sync_to_garmin():
+def check_overlap(fit_start_dt: datetime, fit_duration_sec: int, garmin_activities: list[dict[str, Any]]) -> bool:
+    """Checks if the fit_interval overlaps with any garmin activity interval."""
+    # Add a minimum 1 second duration to ensure max() < min() works properly for instantaneous acts
+    fit_end_dt = fit_start_dt + timedelta(seconds=max(fit_duration_sec, 1))
+    
+    for garmin_activity in garmin_activities:
+        garmin_start_str = garmin_activity.get('startTimeGMT')
+        # Some Garmin types use duration, some might have elapsedDuration (fallbacks)
+        garmin_duration_sec = garmin_activity.get('duration', garmin_activity.get('elapsedDuration', 0))
+        if not garmin_start_str:
+            continue
+            
+        try:
+            # Garmin startTimeGMT is string like "2023-10-25 16:00:00" natively without timezone
+            garmin_start_dt = datetime.strptime(garmin_start_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            garmin_end_dt = garmin_start_dt + timedelta(seconds=garmin_duration_sec)
+            
+            # temporal overlap collision calculation
+            if max(fit_start_dt, garmin_start_dt) < min(fit_end_dt, garmin_end_dt):
+                return True
+        except ValueError as e:
+            logging.debug(f"Could not parse garmin start time: {garmin_start_str} - {e}")
+            continue
+            
+    return False
+
+def filter_recent(activities: list[ActivityData], weeks: int = 3) -> list[ActivityData]:
+    """Filters items from the last three weeks."""
+    threshold = datetime.now(timezone.utc) - timedelta(weeks=weeks)
+    return [a for a in activities if a.created >= threshold]
+
+def filter_already_synced(activities: list[ActivityData], last_synced_dt: datetime) -> list[ActivityData]:
+    """Filters out any activity that is older than or equal to the highest synced timestamp."""
+    return [a for a in activities if a.created > last_synced_dt]
+
+def filter_duplicates(activities: list[ActivityData], garmin_activities: list[dict[str, Any]], bucket: storage.Bucket) -> list[ActivityData]:
+    """Filters against duplicates by downloading exact duration metrics from GCS."""
+    non_duplicates = []
+    
+    for a in activities:
+        json_blob = bucket.blob(a.json_file)
+        fit_duration_sec = 0
+        exact_created = a.created
+        
+        if json_blob.exists():
+            try:
+                json_content = json_blob.download_as_text()
+                json_data = json.loads(json_content)
+                fit_duration_sec = json_data.get('elapsed_seconds', 0)
+                
+                created_str = json_data.get('created')
+                if created_str:
+                    exact_created = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+            except Exception as e:
+                logging.warning(f"Failed to parse companion json {a.json_file}: {e}")
+                
+        if not check_overlap(exact_created, fit_duration_sec, garmin_activities):
+            non_duplicates.append(a)
+            
+    return non_duplicates
+
+def sync_to_garmin() -> None:
     """Main execution function to sync .fit activities from GCS to Garmin Connect."""
     logging.info("Starting Garmin synchronization process...")
     
     # 1. Initialize Garmin Client
     try:
-        username, password = read_credentials("garmin-credentials")
-        client = Garmin(username, password)
-        client.login()
-        logging.info("Successfully logged into Garmin Connect.")
+        client = init_garmin_client()
+        
+        # Pre-fetch the latest 100 workouts to use for duplication checking
+        garmin_activities: list[dict[str, Any]] = client.get_activities(0, 100)
     except Exception as e:
-        logging.error(f"Failed to login to Garmin Connect: {e}")
+        logging.error(f"Failed to login to Garmin Connect or fetch baseline activities. Are you authenticated via gcloud? Error: {e}")
         return
 
     # 2. Access GCS Bucket
@@ -74,83 +154,60 @@ def sync_to_garmin():
     # 3. Get sync state
     last_synced_created = get_last_garmin_sync_time(bucket)
     
-    # Threshold for the 3-week failsafe
-    three_weeks_ago = datetime.now(timezone.utc) - timedelta(days=21)
-    
-    # 4. List and filter .fit blobs
-    all_blobs = list(storage_client.list_blobs(GCS_BUCKET_NAME))
-    fit_blobs = [b for b in all_blobs if b.name.endswith(".fit")]
-    
-    # Determine the ISO timestamp from the filename for comparison logic if available
-    # We want to match the "created" timestamp from the original SmartRow JSON 
-    # to maintain consistency in timestamps.
-    # We use the filename components for filtering since they mirror the 'created' date.
-    
-    # Convert ISO string from state to UTC datetime for accurate comparison
+    # Determine the ISO timestamp from the state for comparison logic
     last_synced_dt = datetime.min.replace(tzinfo=timezone.utc)
     if last_synced_created:
         try:
-            # We expect YYYY-MM-DDTHH:MM:SS.mmmZ
             last_synced_dt = datetime.fromisoformat(last_synced_created.replace("Z", "+00:00"))
         except ValueError:
              logging.warning(f"Could not parse last synced timestamp '{last_synced_created}'.")
 
-    new_uploads = []
-    
-    # To properly update the state, we need to map filename back to the ISO 'created' format
-    # The filename prefix YYYYMMDD_HHMMSS is derived from 'created'.
-    
-    for blob in fit_blobs:
-        file_dt = parse_date_from_filename(blob.name)
-        
-        # Failsafe check (3 weeks)
-        if file_dt < three_weeks_ago:
-            # logging.debug(f"Skipping {blob.name} (failsafe): activity is older than 3 weeks.")
-            continue
-            
-        # Already synced check
-        if file_dt <= last_synced_dt:
-             continue
-             
-        new_uploads.append(blob)
+    # 4. List and filter .fit blobs
+    all_blobs = list(storage_client.list_blobs(GCS_BUCKET_NAME))
+    fit_blob_names = [b.name for b in all_blobs if b.name.endswith(".fit")]
 
-    if not new_uploads:
+    # Create initial ActivityData using filename data to prevent expensive GCS calls
+    activities = []
+    for fname in fit_blob_names:
+        base_name = fname.replace(".fit", "")
+        file_dt = parse_date_from_filename(fname)
+        activities.append(ActivityData(base_name=base_name, created=file_dt))
+        
+    activities.sort(key=lambda x: x.created)
+    activities = filter_recent(activities, weeks=3)
+    activities = filter_already_synced(activities, last_synced_dt)
+    activities = filter_duplicates(activities, garmin_activities, bucket)
+    
+    if not activities:
         logging.info("No new FIT files to sync to Garmin.")
         return
-
-    # Sort new uploads by name (which is chronological)
-    new_uploads.sort(key=lambda x: x.name)
-    
-    logging.info(f"Found {len(new_uploads)} new FIT files to sync.")
+        
+    logging.info(f"Found {len(activities)} new FIT files to sync.")
     
     highest_synced_dt = last_synced_dt
     
-    for blob in new_uploads:
-        logging.info(f"Syncing activity file {blob.name} to Garmin...")
+    for activity in activities:
+        logging.info(f"Syncing activity file {activity.fit_file} to Garmin...")
         try:
+            blob = bucket.blob(activity.fit_file)
+            if not blob.exists():
+                logging.warning(f"File {activity.fit_file} not found in GCS.")
+                continue
+                
             # Download FIT file content
             fit_content = blob.download_as_bytes()
-            
-            # Use io.BytesIO to send as a file-like object to garminconnect
             file_stream = io.BytesIO(fit_content)
             
-            # Garmin doesn't strictly need a filename, but the stream is necessary
-            # We can't easily check for duplicates in Garmin based on ID here, 
-            # so we rely on our state tracking.
             client.upload_activity(file_stream)
-            logging.info(f"Successfully uploaded {blob.name} to Garmin.")
+            logging.info(f"Successfully uploaded {activity.fit_file} to Garmin.")
             
-            # Update local highest synced tracking
-            file_dt = parse_date_from_filename(blob.name)
-            highest_synced_dt = max(highest_synced_dt, file_dt)
+            highest_synced_dt = max(highest_synced_dt, activity.created)
             
         except Exception as e:
-            logging.error(f"Failed to upload {blob.name} to Garmin: {e}")
-            # We continue with next files even if one fails
+            logging.error(f"Failed to upload {activity.fit_file} to Garmin: {e}")
             
     # Update the state file in GCS
     if highest_synced_dt > last_synced_dt:
-        # Convert back to a standardized ISO format for consistency
         update_last_garmin_sync_time(bucket, highest_synced_dt.strftime("%Y-%m-%dT%H:%M:%SZ"))
 
     logging.info("Garmin synchronization process completed.")

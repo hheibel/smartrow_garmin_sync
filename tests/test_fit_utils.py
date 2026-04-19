@@ -12,7 +12,7 @@ from fit_utils import (
 
 class TestFitUtils(unittest.TestCase):
 
-    def test_parse_iso_time_ms(self):
+    def test_parse_iso_time_ms(self) -> None:
         # Basic UTC time
         self.assertEqual(parse_iso_time_ms("2023-10-25T18:00:00Z"), 1698256800000)
         # Time with milliseconds - should reflect 500ms
@@ -20,7 +20,7 @@ class TestFitUtils(unittest.TestCase):
         # Time with +00:00
         self.assertEqual(parse_iso_time_ms("2023-10-25T18:00:00+00:00"), 1698256800000)
 
-    def test_activity_record_to_fit_record(self):
+    def test_activity_record_to_fit_record(self) -> None:
         record = ActivityRecord(
             time_ms=1698256800000,
             heart_rate=150,
@@ -43,7 +43,7 @@ class TestFitUtils(unittest.TestCase):
         self.assertAlmostEqual(msg.position_long, 13.40, places=6)
         self.assertEqual(msg.altitude, 10.0)
 
-    def test_extract_time(self):
+    def test_extract_time(self) -> None:
         xml = '<Trackpoint xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"><Time>2023-10-25T18:00:00Z</Time></Trackpoint>'
         elem = ET.fromstring(xml)
         # Note: We need to register namespace prefix for find if we don't use the full URL in the tag,
@@ -51,7 +51,7 @@ class TestFitUtils(unittest.TestCase):
         # We use the NS dict from fit_utils.
         self.assertEqual(extract_time(elem), 1698256800000)
 
-    def test_extract_watts(self):
+    def test_extract_watts(self) -> None:
         xml = """
         <Trackpoint xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"
                     xmlns:ax="http://www.garmin.com/xmlschemas/ActivityExtension/v2">
@@ -65,7 +65,7 @@ class TestFitUtils(unittest.TestCase):
         elem = ET.fromstring(xml)
         self.assertEqual(extract_watts(elem), 200)
 
-    def test_convert_to_fit(self):
+    def test_convert_to_fit(self) -> None:
         tcx_content = """<?xml version="1.0" encoding="UTF-8"?>
 <TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"
                         xmlns:ax="http://www.garmin.com/xmlschemas/ActivityExtension/v2">

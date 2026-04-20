@@ -1,3 +1,4 @@
+import sys
 from absl import app
 from absl import logging
 from smartrow_sync import sync_smartrow_activities
@@ -20,7 +21,8 @@ def main(argv) -> None:
         
         logging.info("Garmin Syncher task completed successfully.")
     except Exception as e:
-        logging.error(f"An unexpected error occurred during execution: {e}")
+        logging.exception(f"An unexpected error occurred during execution: {e}")        
+        sys.exit(1)
         
 if __name__ == "__main__":
     app.run(main)

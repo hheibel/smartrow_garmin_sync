@@ -1,7 +1,12 @@
+"""Utility functions for converting TCX to FIT and modifying FIT attributes."""
+
 import datetime
 import xml.etree.ElementTree as ET
+from contextlib import suppress
 from dataclasses import dataclass
+from typing import Any
 
+from absl import logging
 from fit_tool.fit_file_builder import FitFile
 from fit_tool.fit_file_builder import FitFileBuilder
 from fit_tool.profile.messages.activity_message import ActivityMessage
@@ -26,13 +31,13 @@ NS = {
 
 
 def extract_time(trackpoint_element: ET.Element) -> int | None:
-    """Extracts time from a Trackpoint element and returns Garmin timestamp (ms).
+    """Extracts time from a Trackpoint element and returns Garmin timestamp.
 
     Args:
         trackpoint_element: The XML element for a TCX Trackpoint.
 
     Returns:
-        The timestamp in milliseconds since the Garmin Epoch, or None if missing.
+        The timestamp in milliseconds since the Garmin Epoch, or None.
     """
     time_element = trackpoint_element.find("ns:Time", NS)
     if time_element is not None and time_element.text:
@@ -246,7 +251,7 @@ def read_fit_file(input_path: str) -> FitFile:
 
 
 def rewrite_fit_file_attributes(input_path: str, output_path: str) -> None:
-    """Rewrites attributes of a FIT file to fix durations and add Garmin metadata.
+    """Rewrites attributes of a FIT file to fix durations and add metadata.
 
     Args:
         input_path: Path to the original FIT file.
@@ -282,10 +287,8 @@ def rewrite_fit_file_attributes(input_path: str, output_path: str) -> None:
         new_msg = msg_type()
         for field in source.fields:
             if (val := field.get_value()) is not None:
-                try:
+                with suppress(AttributeError, ValueError):
                     setattr(new_msg, field.name, val)
-                except (AttributeError, ValueError):
-                    pass
         return new_msg
 
     def get_duration(session: SessionMessage | None) -> float | None:

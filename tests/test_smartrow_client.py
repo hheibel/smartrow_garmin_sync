@@ -1,11 +1,12 @@
 import unittest
-import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
+from unittest.mock import patch
+
 import requests
 
 # Mock google.cloud modules so that tests can run without having them installed
-
 from smartrow_client import SmartRowClient
+
 
 class TestSmartRowClient(unittest.TestCase):
     """
@@ -13,11 +14,11 @@ class TestSmartRowClient(unittest.TestCase):
     and HTTP requests via the requests library.
     """
 
-    @patch('smartrow_client.read_credentials')
+    @patch("smartrow_client.read_credentials")
     def test_init(self, mock_read_credentials) -> None:
         """
         Test the initialization of SmartRowClient.
-        
+
         Verifies that:
         - The client reads credentials successfully upon instantiation.
         - The credentials, base_url, and an empty session state are properly assigned.
@@ -31,12 +32,14 @@ class TestSmartRowClient(unittest.TestCase):
         self.assertEqual(client.base_url, "https://smartrow.fit")
         mock_read_credentials.assert_called_once_with("smartrow-credentials")
 
-    @patch('smartrow_client.read_credentials')
-    @patch('smartrow_client.requests.Session')
-    def test_login_success(self, mock_session_class, mock_read_credentials) -> None:
+    @patch("smartrow_client.read_credentials")
+    @patch("smartrow_client.requests.Session")
+    def test_login_success(
+        self, mock_session_class, mock_read_credentials
+    ) -> None:
         """
         Test successful login behavior.
-        
+
         Verifies that:
         - The _login method instantiates a new requests.Session.
         - A GET request is submitted to the correct login endpoint.
@@ -46,7 +49,7 @@ class TestSmartRowClient(unittest.TestCase):
         mock_read_credentials.return_value = ("testuser", "testpass")
         mock_session = MagicMock()
         mock_session_class.return_value = mock_session
-        
+
         # Mock the get response
         mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
@@ -62,12 +65,14 @@ class TestSmartRowClient(unittest.TestCase):
         self.assertEqual(args[0], "https://smartrow.fit/api/account/0")
         self.assertIn("Authorization", kwargs["headers"])
 
-    @patch('smartrow_client.read_credentials')
-    @patch('smartrow_client.requests.Session')
-    def test_login_failure(self, mock_session_class, mock_read_credentials) -> None:
+    @patch("smartrow_client.read_credentials")
+    @patch("smartrow_client.requests.Session")
+    def test_login_failure(
+        self, mock_session_class, mock_read_credentials
+    ) -> None:
         """
         Test failure handling during login.
-        
+
         Verifies that:
         - If the API returns a failing status code (e.g. 401 Unauthorized), the login process raises an HTTPError.
         - The session behaves correctly under an exception context and the client bubbles up the error appropriately.
@@ -75,21 +80,23 @@ class TestSmartRowClient(unittest.TestCase):
         mock_read_credentials.return_value = ("testuser", "testpass")
         mock_session = MagicMock()
         mock_session_class.return_value = mock_session
-        
+
         # Mock the get response to raise an exception
         mock_response = MagicMock()
-        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("Login Failed")
+        mock_response.raise_for_status.side_effect = (
+            requests.exceptions.HTTPError("Login Failed")
+        )
         mock_session.get.return_value = mock_response
 
         client = SmartRowClient()
         with self.assertRaises(requests.exceptions.HTTPError):
             client._login()
-            
-    @patch('smartrow_client.read_credentials')
+
+    @patch("smartrow_client.read_credentials")
     def test_get_activities(self, mock_read_credentials) -> None:
         """
         Test retrieving the summary feed of public game activities.
-        
+
         Verifies that:
         - A mock session correctly mocks the retrieval of JSON activity lists.
         - The method parses the JSON response and returns it to the caller.
@@ -97,24 +104,26 @@ class TestSmartRowClient(unittest.TestCase):
         """
         mock_read_credentials.return_value = ("testuser", "testpass")
         client = SmartRowClient()
-        
+
         # Mock session and its get method
         client.session = MagicMock()
         mock_response = MagicMock()
         mock_response.json.return_value = [{"id": 1, "name": "activity 1"}]
         client.session.get.return_value = mock_response
-        
+
         activities = client.get_activities()
-        
+
         self.assertEqual(len(activities), 1)
         self.assertEqual(activities[0]["id"], 1)
-        client.session.get.assert_called_once_with("https://smartrow.fit/api/public-game")
+        client.session.get.assert_called_once_with(
+            "https://smartrow.fit/api/public-game"
+        )
 
-    @patch('smartrow_client.read_credentials')
+    @patch("smartrow_client.read_credentials")
     def test_get_activity(self, mock_read_credentials) -> None:
         """
         Test retrieving a single activity payload exported as TCX format.
-        
+
         Verifies that:
         - A dedicated GET request using the specific activity ID is launched.
         - The text representation of the response payload is successfully extracted and returned.
@@ -122,17 +131,20 @@ class TestSmartRowClient(unittest.TestCase):
         """
         mock_read_credentials.return_value = ("testuser", "testpass")
         client = SmartRowClient()
-        
+
         # Mock session and its get method
         client.session = MagicMock()
         mock_response = MagicMock()
         mock_response.content = b"<tcx>test data</tcx>"
         client.session.get.return_value = mock_response
-        
-        tcx_data = client.get_activity(123, format="tcx")
-        
-        self.assertEqual(tcx_data, b"<tcx>test data</tcx>")
-        client.session.get.assert_called_once_with("https://smartrow.fit/api/export/tcx/123")
 
-if __name__ == '__main__':
+        tcx_data = client.get_activity(123, format="tcx")
+
+        self.assertEqual(tcx_data, b"<tcx>test data</tcx>")
+        client.session.get.assert_called_once_with(
+            "https://smartrow.fit/api/export/tcx/123"
+        )
+
+
+if __name__ == "__main__":
     unittest.main()

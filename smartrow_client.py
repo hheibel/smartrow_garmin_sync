@@ -1,31 +1,30 @@
-from typing import Any
-import requests
 import base64
+from typing import Any
+
+import requests
 from absl import logging
+
 from utils import read_credentials
 
+
 class SmartRowClient:
-    """
-    A client for the SmartRow API.
+    """A client for the SmartRow API.
     Handles authentication and data fetching.
     """
+
     def __init__(self) -> None:
         self.base_url = "https://smartrow.fit"
         self.username, self.password = read_credentials("smartrow-credentials")
-        self.session: requests.Session | None = None 
-    
-    def _login(self) -> None:
-        """
-        Logs in to the website, retrieves a session cookie, and stores the session.
-        This method is called automatically when needed.
-        """
+        self.session: requests.Session | None = None
 
-        if self.session:
-            return
-        
-        """
-        Logs in to the website using a GET request, retrieves a session cookie, and stores the session.
-        This method is called automatically when needed.
+    def _login(self) -> None:
+        """Logs in to the website using Basic Auth to retrieve a session cookie.
+
+        This method is called automatically when needed. It establishes a
+        requests.Session and stores it in self.session.
+
+        Raises:
+            requests.exceptions.RequestException: If the login request fails.
         """
         if self.session:
             return
@@ -35,7 +34,9 @@ class SmartRowClient:
 
         # 2. Prepare credentials for Basic Authentication
         credentials = f"{self.username}:{self.password}"
-        encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+        encoded_credentials = base64.b64encode(
+            credentials.encode("utf-8")
+        ).decode("utf-8")
 
         # 3. Prepare the Authorization header
         login_headers = {
@@ -43,7 +44,11 @@ class SmartRowClient:
             "Accept": "application/json",
             "Content-Type": "application/json",
             "Connection": "keep-alive",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/142.0.0.0 Safari/537.36"
+            ),
         }
 
         # 4. Send the login request to /api/account/0
@@ -54,25 +59,27 @@ class SmartRowClient:
             login_response = session.get(login_url, headers=login_headers)
             login_response.raise_for_status()
         except requests.exceptions.RequestException as e:
-            print(f"Login failed: {e}")
-            print("The server rejected the login request. Please verify your credentials.")
-            raise  # Re-raise the exception
+            logging.error(
+                "Login failed: %s. Please verify your credentials.", e
+            )
+            raise
 
         self.session = session
 
-
     def get_activities(self) -> list[dict[str, Any]]:
-        """
-        Fetches a list of public games.
-        If not already logged in, it will perform login first.
-        
-        Returns a list of dictionaries. Some exemplary fields for each activity are:
-        - `id` (int): Internal SmartRow activity ID.
-        - `created` (str): Activity timestamp (e.g., "2026-03-05T06:53:50.807Z").
-        - `strava_id` (str): Linked Strava activity ID, if synced.
-        - `distance` (int): Total distance covered in meters.
+        """Fetches a list of public activities from SmartRow.
 
-        For details, see github.com/hheibel/smartrow_garmin_sync/blob/main/docs/smartrow_activity.md
+        If not already logged in, it will perform login first.
+
+        Returns:
+            A list of dictionaries representing activities. Key fields include:
+            - id (int): Internal SmartRow activity ID.
+            - created (str): ISO timestamp.
+            - public_id (str): ID used for exports.
+            - distance (int): Distance in meters.
+
+        Raises:
+            requests.exceptions.RequestException: If the API request fails.
         """
         if not self.session:
             self._login()
@@ -80,35 +87,49 @@ class SmartRowClient:
         activities_url = f"{self.base_url}/api/public-game"
 
         try:
-            activities_response = self.session.get(activities_url)
-            activities_response.raise_for_status()
-            return activities_response.json()
+            if self.session:
+                activities_response = self.session.get(activities_url)
+                activities_response.raise_for_status()
+                return list(activities_response.json())
+            return []
 
         except requests.exceptions.RequestException as e:
-            print(f"Failed to fetch activities: {e}")
-            print("The server responded with an error while fetching the activity list.")
+            logging.error("Failed to fetch activities: %s", e)
             raise
 
+    def get_activity(self, public_id: str, format: str = "tcx") -> bytes:
+        """Fetches raw activity data (FIT/TCX) by its public ID.
 
-    def get_activity(self, public_id: str, format: str = "tcx") -> str:
-        """
-        Fetches detailed information about a specific activity by its public ID.
         If not already logged in, it will perform login first.
-        
-        CRITICAL: This function requires the `public_id` of the activity (e.g., "d8f8a8b...af38").
-        Do NOT pass the standard integer `id` of the activity! Using the integer `id` will fail.
+
+        Args:
+            public_id: The public UUID string of the activity.
+            format: The format to export ('tcx' or 'fit').
+
+        Returns:
+            The raw bytes of the exported file.
+
+        Raises:
+            requests.exceptions.RequestException: If the download fails.
         """
         if not self.session:
             self._login()
 
-        activity_details_url = f"{self.base_url}/api/export/{format}/{public_id}"
+        activity_details_url = (
+            f"{self.base_url}/api/export/{format}/{public_id}"
+        )
 
         try:
-            details_response = self.session.get(activity_details_url)
-            details_response.raise_for_status()
-            return details_response.content  # Return the data as bytes (supports both TCX and FIT)
+            if self.session:
+                details_response = self.session.get(activity_details_url)
+                details_response.raise_for_status()
+                return bytes(details_response.content)
+            return b""
 
         except requests.exceptions.RequestException as e:
-            logging.info(f"Failed to fetch activity details for public ID {public_id}: {e}")
-            logging.debug("The server responded with an error, possibly because the activity has no associated TCX data.")
+            logging.error(
+                "Failed to fetch activity details for public ID %s: %s",
+                public_id,
+                e,
+            )
             raise

@@ -1,28 +1,39 @@
 import sys
+from collections.abc import Sequence
+
 from absl import app
 from absl import logging
-from smartrow_sync import sync_smartrow_activities
-from garmin_sync import sync_to_garmin
 
-def main(argv) -> None:
-    """
-    Main entrypoint for the garmin-syncher application.
+from garmin_sync import sync_to_garmin
+from smartrow_sync import sync_smartrow_activities
+
+
+def main(argv: Sequence[str]) -> None:
+    """Main entrypoint for the garmin-syncher application.
+
     - Synchronizes SmartRow activities into Google Cloud Storage.
     - Synchronizes newly received .fit files from GCS to Garmin Connect.
+
+    Args:
+        argv: Command-line arguments.
     """
+    del argv  # Unused
     logging.info("Starting Garmin Syncher application...")
-    
+
     try:
         # Sync SmartRow to GCS
         sync_smartrow_activities()
-        
+
         # Sync GCS to Garmin Connect
         sync_to_garmin()
-        
+
         logging.info("Garmin Syncher task completed successfully.")
     except Exception as e:
-        logging.exception(f"An unexpected error occurred during execution: {e}")        
+        logging.exception(
+            "An unexpected error occurred during execution: %s", e
+        )
         sys.exit(1)
-        
+
+
 if __name__ == "__main__":
     app.run(main)

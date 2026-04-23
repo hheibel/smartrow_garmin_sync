@@ -1,27 +1,30 @@
 import os
 import unittest
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
-from fit_utils import (
-    parse_iso_time_ms,
-    ActivityRecord,
-    extract_time,
-    extract_watts,
-    convert_to_fit,
-    NS,
-    rewrite_fit_file_attributes,
-    read_fit_file
-)
+
+from fit_utils import ActivityRecord
+from fit_utils import convert_to_fit
+from fit_utils import extract_time
+from fit_utils import extract_watts
+from fit_utils import parse_iso_time_ms
+from fit_utils import read_fit_file
+from fit_utils import rewrite_fit_file_attributes
+
 
 class TestFitUtils(unittest.TestCase):
-
     def test_parse_iso_time_ms(self) -> None:
         # Basic UTC time
-        self.assertEqual(parse_iso_time_ms("2023-10-25T18:00:00Z"), 1698256800000)
+        self.assertEqual(
+            parse_iso_time_ms("2023-10-25T18:00:00Z"), 1698256800000
+        )
         # Time with milliseconds - should reflect 500ms
-        self.assertEqual(parse_iso_time_ms("2023-10-25T18:00:00.500Z"), 1698256800500)
+        self.assertEqual(
+            parse_iso_time_ms("2023-10-25T18:00:00.500Z"), 1698256800500
+        )
         # Time with +00:00
-        self.assertEqual(parse_iso_time_ms("2023-10-25T18:00:00+00:00"), 1698256800000)
+        self.assertEqual(
+            parse_iso_time_ms("2023-10-25T18:00:00+00:00"), 1698256800000
+        )
 
     def test_activity_record_to_fit_record(self) -> None:
         record = ActivityRecord(
@@ -32,7 +35,7 @@ class TestFitUtils(unittest.TestCase):
             watts=200,
             position_lat=52.52,
             position_long=13.40,
-            altitude=10.0
+            altitude=10.0,
         )
         msg = record.to_fit_record()
         self.assertIsNotNone(msg)
@@ -107,58 +110,75 @@ class TestFitUtils(unittest.TestCase):
         self.assertTrue(len(fit_file.records) > 0)
 
     def test_rewrite_fit_file_attributes(self) -> None:
-        input_path = os.path.join(os.path.dirname(__file__), 'test_data', '20251211_065506_2578614.fit')
-        output_path = os.path.join(os.path.dirname(__file__), 'test_data', 'rewritten_test.fit')
-        
+        input_path = os.path.join(
+            os.path.dirname(__file__),
+            "test_data",
+            "20251211_065506_2578614.fit",
+        )
+        output_path = os.path.join(
+            os.path.dirname(__file__), "test_data", "rewritten_test.fit"
+        )
+
         # Ensure we don't accidentally use a stale output file
         if os.path.exists(output_path):
             os.remove(output_path)
-            
+
         try:
             rewrite_fit_file_attributes(input_path, output_path)
-            
+
             # Read rewritten file and validate
             rewritten_fit = read_fit_file(output_path)
-            
+
             file_id_msg = None
             session_msgs = []
             activity_msg = None
             for record in rewritten_fit.records:
-                if type(record.message).__name__ == 'FileIdMessage':
+                if type(record.message).__name__ == "FileIdMessage":
                     file_id_msg = record.message
-                if type(record.message).__name__ == 'SessionMessage':
+                if type(record.message).__name__ == "SessionMessage":
                     session_msgs.append(record.message)
-                if type(record.message).__name__ == 'ActivityMessage':
+                if type(record.message).__name__ == "ActivityMessage":
                     activity_msg = record.message
-                    
+
             self.assertIsNotNone(file_id_msg)
-            self.assertEqual(getattr(file_id_msg, 'manufacturer', None), 1)
-            self.assertEqual(getattr(file_id_msg, 'product', None), 3843)
-            self.assertEqual(getattr(file_id_msg, 'serial_number', None), 123456789)
-            
+            self.assertEqual(getattr(file_id_msg, "manufacturer", None), 1)
+            self.assertEqual(getattr(file_id_msg, "product", None), 3843)
+            self.assertEqual(
+                getattr(file_id_msg, "serial_number", None), 123456789
+            )
+
             # Verify deduplication: exactly one session should remain (source only had one anyway)
             self.assertEqual(len(session_msgs), 1)
             session_msg = session_msgs[0]
-            
+
             # Verify the max_speed was correctly aggregated from LapMessages
-            self.assertAlmostEqual(getattr(session_msg, 'max_speed', None), 4.425, places=3)
-            
+            self.assertAlmostEqual(
+                getattr(session_msg, "max_speed", None), 4.425, places=3
+            )
+
             # Verify the duration was recalculated correctly based on wall-clock time
             # Timestamp (End): 1765438420000, Start Time: 1765436106000
             # Diff: 2314000ms = 2314.0s (38:34.000)
-            self.assertEqual(getattr(session_msg, 'total_elapsed_time', None), 2314.0)
-            self.assertEqual(getattr(session_msg, 'total_timer_time', None), 2314.0)
-            
+            self.assertEqual(
+                getattr(session_msg, "total_elapsed_time", None), 2314.0
+            )
+            self.assertEqual(
+                getattr(session_msg, "total_timer_time", None), 2314.0
+            )
+
             # Verify correct indexing and activity header
-            self.assertEqual(getattr(session_msg, 'message_index', None), 0)
+            self.assertEqual(getattr(session_msg, "message_index", None), 0)
             self.assertIsNotNone(activity_msg)
-            self.assertEqual(getattr(activity_msg, 'num_sessions', None), 1)
-            self.assertEqual(getattr(activity_msg, 'total_timer_time', None), 2314.0)
+            self.assertEqual(getattr(activity_msg, "num_sessions", None), 1)
+            self.assertEqual(
+                getattr(activity_msg, "total_timer_time", None), 2314.0
+            )
         finally:
             # Clean up
             # if os.path.exists(output_path):
             #     os.remove(output_path)
             print(f"Cleaned up {output_path}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

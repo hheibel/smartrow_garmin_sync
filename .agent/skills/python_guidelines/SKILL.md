@@ -58,25 +58,29 @@ Every function and method must have complete type annotations.
         ...
     ```
 
-## 4. Formatting and Linting with Ruff
-The project uses **Ruff** for consistent formatting and linting, configured in `pyproject.toml` to match the Google Style Guide.
+### Integration and Automation
+The project uses **Ruff** for consistent formatting and linting, configured in `pyproject.toml`.
 
-### Auto-Formatting
-To auto-format files according to the guidelines:
+#### For the User (VS Code/Cursor)
+Formatting and basic linting are **automatic**. Saving a file will trigger Ruff to:
+1.  Format the code.
+2.  Organize imports.
+3.  Fix safe linting violations.
+*Note: Ensure the Ruff extension is installed.*
+
+#### For the Agent (Antigravity/Jetski)
+When the agent modifies files directly on disk, VS Code's "format on save" **does not trigger**. Therefore:
+1.  The agent should run `ruff format <file>` after modifying Python files.
+2.  The agent should run `ruff check --fix <file>` to ensure compliance.
+
+#### Bulk Operations
+To check or format the entire project:
 ```powershell
+# Format all files
 ruff format .
-```
-
-### Linting and Auto-Fixing
-To run the linter and automatically fix safe violations (including import sorting):
-```powershell
+# Check and fix all files
 ruff check --fix .
 ```
-
-### Integration in Jetski
-To ensure files are auto-formatted when working with the agent:
-1.  The agent should run `ruff format` after making significant changes to Python files.
-2.  The agent should run `ruff check --fix` to ensure imports are sorted and common issues are resolved.
 
 ## When to use this skill
 - Whenever writing or refactoring Python code.

@@ -1,5 +1,5 @@
 import os
-import io
+
 
 class FakeBlob:
     def __init__(self, name: str, bucket_path: str) -> None:
@@ -11,21 +11,24 @@ class FakeBlob:
         return os.path.exists(self._filepath)
 
     def download_as_text(self) -> str:
-        with open(self._filepath, 'r', encoding='utf-8') as f:
+        with open(self._filepath, encoding="utf-8") as f:
             return f.read()
 
     def download_as_bytes(self) -> bytes:
-        with open(self._filepath, 'rb') as f:
+        with open(self._filepath, "rb") as f:
             return f.read()
 
-    def upload_from_string(self, data: bytes | str, content_type: str | None = None) -> None:
+    def upload_from_string(
+        self, data: bytes | str, content_type: str | None = None
+    ) -> None:
         os.makedirs(os.path.dirname(self._filepath), exist_ok=True)
         if isinstance(data, bytes):
-            with open(self._filepath, 'wb') as f:
+            with open(self._filepath, "wb") as f:
                 f.write(data)
         else:
-            with open(self._filepath, 'w', encoding='utf-8') as f:
+            with open(self._filepath, "w", encoding="utf-8") as f:
                 f.write(data)
+
 
 class FakeBucket:
     def __init__(self, name: str, local_root: str) -> None:
@@ -40,6 +43,7 @@ class FakeBucket:
 
     def blob(self, name: str) -> FakeBlob:
         return FakeBlob(name, self._bucket_path)
+
 
 class FakeStorageClient:
     def __init__(self, local_root: str, project: str | None = None) -> None:

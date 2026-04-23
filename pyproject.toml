@@ -1,0 +1,45 @@
+[tool.ruff]
+# Target line length for the Google Python Style Guide
+line-length = 80
+indent-width = 4
+
+[tool.ruff.lint]
+# Enable specific linting rules
+select = [
+    "E", "W",  # pycodestyle (Error, Warning)
+    "F",       # pyflakes
+    "I",       # isort (Import sorting)
+    "N",       # pep8-naming
+    "D",       # pydocstyle (Docstrings)
+    "UP",      # pyupgrade (Modern Python syntax)
+    "B",       # flake8-bugbear (Common bugs)
+    "SIM",     # flake8-simplify (Simplify code)
+    "G",       # flake8-logging-format (Logging)
+    "RUF",     # Ruff-specific rules
+]
+
+# Ignore specific rules that conflict with Google Style or are too restrictive
+ignore = [
+    "D203",  # one-blank-line-before-class (Incompatible with D211)
+    "D213",  # multi-line-summary-second-line (Incompatible with D212)
+]
+
+[tool.ruff.lint.pydocstyle]
+# Use Google-style docstrings
+convention = "google"
+
+[tool.ruff.lint.isort]
+# Google style prefers one import per line for better readability and diffs
+force-single-line = true
+order-by-type = true
+
+[tool.ruff.format]
+# Standard formatting settings
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore docstring requirements in tests
+"tests/**/*.py" = ["D"]

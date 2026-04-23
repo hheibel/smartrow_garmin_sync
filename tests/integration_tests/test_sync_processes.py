@@ -7,6 +7,7 @@ import subprocess
 
 # Add parent directory to path to import main code
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+sys.path.insert(0, os.path.dirname(__file__))
 
 from smartrow_sync import sync_smartrow_activities
 from smartrow_client import SmartRowClient
@@ -29,6 +30,9 @@ class TestSyncSmartRowActivities(unittest.TestCase):
 
         # Setup local mock directory for GCS
         self.mock_gcs_root = os.path.join(os.path.dirname(__file__), 'mock_gcs_bucket')
+        if os.path.exists(self.mock_gcs_root):
+            import shutil
+            shutil.rmtree(self.mock_gcs_root)
         os.makedirs(self.mock_gcs_root, exist_ok=True)
 
     @patch('smartrow_sync.storage.Client')

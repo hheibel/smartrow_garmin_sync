@@ -121,20 +121,19 @@ class TestSmartRowSync(unittest.TestCase):
         self.assertEqual(activities[2]["created"], newer_sec)
         self.assertEqual(activities[3]["created"], newer_month)
 
-    @patch('smartrow_sync.convert_to_fit')
     @patch('smartrow_sync.update_last_synced_time')
     @patch('smartrow_sync.upload_to_gcs')
     @patch('smartrow_sync.storage.Client')
     @patch('smartrow_sync.SmartRowClient')
     @patch('smartrow_sync.get_last_synced_time')
-    def test_sync_smartrow_activities(self, mock_get_last_synced, mock_client_class, mock_storage_client_class, mock_upload_to_gcs, mock_update_last_synced, mock_convert_to_fit) -> None:
+    def test_sync_smartrow_activities(self, mock_get_last_synced, mock_client_class, mock_storage_client_class, mock_upload_to_gcs, mock_update_last_synced) -> None:
         """
         Test the main synchronization loop for SmartRow activities.
         
         Verifies that:
         - Only activities newer than the 'last_synced' threshold are processed.
-        - The TCX detail string is explicitly fetched for the filtered activities.
-        - Two upload events (JSON + TCX) trigger for each new activity.
+        - The FIT detail bytes are explicitly fetched for the filtered activities.
+        - Two upload events (JSON + FIT) trigger for each new activity.
         - The last synced marker is properly updated with the absolute newest timestamp.
         """
         mock_get_last_synced.return_value = "2026-03-01T00:00:00Z"
@@ -146,7 +145,7 @@ class TestSmartRowSync(unittest.TestCase):
             {"id": 2, "public_id": "uuid-2", "created": "2026-03-02T10:00:00Z"}, # New
             {"id": 3, "public_id": "uuid-3", "created": "2026-03-05T06:53:50.807Z"}  # Newest
         ]
-        mock_smartrow_client.get_activity_tcx.return_value = "<tcx>data</tcx>"
+        mock_smartrow_client.get_activity.return_value = b"fit_data"
         
         mock_storage_client = MagicMock()
         mock_storage_client_class.return_value = mock_storage_client
@@ -154,24 +153,16 @@ class TestSmartRowSync(unittest.TestCase):
         mock_storage_client.bucket.return_value = mock_bucket
         mock_bucket.exists.return_value = True
 
-        # Mock the FIT conversion return value
-        mock_fit_file = MagicMock()
-        mock_fit_file.to_bytes.return_value = b"fit_data"
-        mock_convert_to_fit.return_value = mock_fit_file
-
         sync_smartrow_activities()
         
         # Should only process activities newer than 2026-03-01T00:00:00Z
-        # So it should upload id 2 and id 3. JSON + TCX + FIT for each -> 6 uploads
-        self.assertEqual(mock_upload_to_gcs.call_count, 6)
+        # So it should upload id 2 and id 3. JSON + FIT for each -> 4 uploads
+        self.assertEqual(mock_upload_to_gcs.call_count, 4)
         
-        # Verify it fetched TCX for id 2 and id 3 using their public_ids
-        mock_smartrow_client.get_activity_tcx.assert_any_call("uuid-2")
-        mock_smartrow_client.get_activity_tcx.assert_any_call("uuid-3")
-        self.assertEqual(mock_smartrow_client.get_activity_tcx.call_count, 2)
-        
-        # Verify FIT conversion was called twice
-        self.assertEqual(mock_convert_to_fit.call_count, 2)
+        # Verify it fetched FIT for id 2 and id 3 using their public_ids
+        mock_smartrow_client.get_activity.assert_any_call("uuid-2", format="fit")
+        mock_smartrow_client.get_activity.assert_any_call("uuid-3", format="fit")
+        self.assertEqual(mock_smartrow_client.get_activity.call_count, 2)
         
         # Verify last synced time was updated with the newest item's timestamp
         mock_update_last_synced.assert_called_with(mock_bucket, "2026-03-05T06:53:50.807Z")

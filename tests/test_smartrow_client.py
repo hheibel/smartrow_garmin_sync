@@ -111,7 +111,7 @@ class TestSmartRowClient(unittest.TestCase):
         client.session.get.assert_called_once_with("https://smartrow.fit/api/public-game")
 
     @patch('smartrow_client.read_credentials')
-    def test_get_activity_tcx(self, mock_read_credentials) -> None:
+    def test_get_activity(self, mock_read_credentials) -> None:
         """
         Test retrieving a single activity payload exported as TCX format.
         
@@ -126,12 +126,12 @@ class TestSmartRowClient(unittest.TestCase):
         # Mock session and its get method
         client.session = MagicMock()
         mock_response = MagicMock()
-        mock_response.text = "<tcx>test data</tcx>"
+        mock_response.content = b"<tcx>test data</tcx>"
         client.session.get.return_value = mock_response
         
-        tcx_data = client.get_activity_tcx(123)
+        tcx_data = client.get_activity(123, format="tcx")
         
-        self.assertEqual(tcx_data, "<tcx>test data</tcx>")
+        self.assertEqual(tcx_data, b"<tcx>test data</tcx>")
         client.session.get.assert_called_once_with("https://smartrow.fit/api/export/tcx/123")
 
 if __name__ == '__main__':

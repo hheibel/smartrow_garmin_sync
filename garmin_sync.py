@@ -11,6 +11,7 @@ from garminconnect import Garmin
 
 from config import PROJECT_ID, GCS_BUCKET_NAME
 from utils import init_garmin_client
+from fit_utils import rewrite_fit_file_attributes
 
 
 
@@ -28,10 +29,6 @@ class ActivityData:
     @property
     def json_file(self) -> str:
         return f"{self.base_name}.json"
-        
-    @property
-    def tcx_file(self) -> str:
-        return f"{self.base_name}.tcx"
 
 def get_last_garmin_sync_time(bucket: storage.Bucket) -> str:
     """Read the last synced activity creation time from the GCS state file for Garmin."""
@@ -197,11 +194,14 @@ def sync_to_garmin() -> None:
                     logging.warning(f"File {activity.fit_file} not found in GCS.")
                     continue
                     
-                # Download FIT file content
-                local_fit_path = os.path.join(tmp_dir, activity.fit_file)
-                blob.download_to_filename(local_fit_path)
+                # Download and Translate on-the-fly
+                raw_fit_path = os.path.join(tmp_dir, f"raw_{activity.fit_file}")
+                processed_fit_path = os.path.join(tmp_dir, activity.fit_file)
                 
-                client.upload_activity(local_fit_path)
+                blob.download_to_filename(raw_fit_path)
+                rewrite_fit_file_attributes(raw_fit_path, processed_fit_path)
+                
+                client.upload_activity(processed_fit_path)
                 logging.info(f"Successfully uploaded {activity.fit_file} to Garmin.")
                 
                 highest_synced_dt = max(highest_synced_dt, activity.created)

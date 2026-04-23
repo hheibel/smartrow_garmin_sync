@@ -7,12 +7,12 @@ The SmartRow API returns activities as a list of JSON objects. Based on the prov
 The following fields are generally the most crucial for syncing or tracking data:
 
 > [!WARNING]
-> When downloading TCX data using `get_activity_tcx`, you MUST use the `public_id`. Trying to use the standard integer `id` is a common mistake and will fail.
+> When downloading TCX data using `get_activity`, you MUST use the `public_id`. Trying to use the standard integer `id` is a common mistake and will fail.
 
 | Field | Type | Description | Example |
 |---|---|---|---|
-| `id` | Integer | The unique internal identifier for the activity within SmartRow. Do NOT use this for `get_activity_tcx`. | `2694175` |
-| `public_id`| String (UUID)| The public identifier used for downloading the TCX file. **Required by `get_activity_tcx`**. | `"d8f8a...af38"`|
+| `id` | Integer | The unique internal identifier for the activity within SmartRow. Do NOT use this for `get_activity`. | `2694175` |
+| `public_id`| String (UUID)| The public identifier used for downloading the TCX file. **Required by `get_activity`**. | `"d8f8a...af38"`|
 | `created` | String (ISO 8601) | The timestamp representing when the activity was created/started. | `"2026-03-05T06:53:50.807Z"` |
 | `strava_id` | String | The corresponding ID of the activity if it has been synced to Strava. | `"18707734213"` |
 | `distance` | Integer | The total distance rowed in meters. | `8500` |

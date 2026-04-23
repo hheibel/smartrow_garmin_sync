@@ -108,11 +108,12 @@ class TestGarminSync(unittest.TestCase):
         self.assertEqual(len(filtered), 1)
         self.assertEqual(filtered[0].base_name, "unique")
 
+    @patch('garmin_sync.rewrite_fit_file_attributes')
     @patch('garmin_sync.update_last_garmin_sync_time')
     @patch('garmin_sync.storage.Client')
     @patch('garmin_sync.get_last_garmin_sync_time')
     @patch('garmin_sync.init_garmin_client')
-    def test_sync_to_garmin_filtering(self, mock_init_garmin_client, mock_get_last_sync, mock_storage_client_class, mock_update_last_sync) -> None:
+    def test_sync_to_garmin_filtering(self, mock_init_garmin_client, mock_get_last_sync, mock_storage_client_class, mock_update_last_sync, mock_rewrite) -> None:
         # Setup today for consistent testing (let's say 2026-03-30)
         today = datetime(2026, 3, 30, 12, 0, 0, tzinfo=timezone.utc)
         

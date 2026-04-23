@@ -90,7 +90,7 @@ class SmartRowClient:
             raise
 
 
-    def get_activity_tcx(self, public_id: str) -> str:
+    def get_activity(self, public_id: str, format: str = "tcx") -> str:
         """
         Fetches detailed information about a specific activity by its public ID.
         If not already logged in, it will perform login first.
@@ -101,12 +101,12 @@ class SmartRowClient:
         if not self.session:
             self._login()
 
-        activity_details_url = f"{self.base_url}/api/export/tcx/{public_id}"
+        activity_details_url = f"{self.base_url}/api/export/{format}/{public_id}"
 
         try:
             details_response = self.session.get(activity_details_url)
             details_response.raise_for_status()
-            return details_response.text  # Return the TCX data as a string
+            return details_response.content  # Return the data as bytes (supports both TCX and FIT)
 
         except requests.exceptions.RequestException as e:
             logging.info(f"Failed to fetch activity details for public ID {public_id}: {e}")

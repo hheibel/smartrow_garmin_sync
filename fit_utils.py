@@ -222,6 +222,73 @@ def convert_to_fit(tcx_string: str) -> FitFile:
 
 
 def save_fit_file(fit_file: FitFile, output_path: str) -> None:
-    with open(output_path, 'wb') as fit_output:
-        fit_file.write(fit_output)
+    fit_file.to_file(output_path)
     print(f"Done! File saved as: {output_path}")
+
+def read_fit_file(input_path: str) -> FitFile:
+    """Reads a FIT file from disk and returns a FitFile object."""
+    return FitFile.from_file(input_path)
+
+def rewrite_fit_file_attributes(input_path: str, output_path: str) -> None:
+    fit_file = read_fit_file(input_path)
+    
+    # Analysis Pass: Aggregate Lap metrics and identify target Session
+    max_ems, max_ms, target_session = None, None, None
+    for record in fit_file.records:
+        msg = record.message
+        m_type = type(msg).__name__
+        if m_type == 'LapMessage':
+            l_ems, l_ms = getattr(msg, 'enhanced_max_speed', None), getattr(msg, 'max_speed', None)
+            if l_ems is not None: max_ems = max(max_ems or 0, l_ems)
+            if l_ms is not None: max_ms = max(max_ms or 0, l_ms)
+        elif m_type == 'SessionMessage' and target_session is None:
+            if getattr(msg, 'total_elapsed_time', None) == getattr(msg, 'total_timer_time', None) != None:
+                target_session = msg
+
+    def rebuild_msg(source, msg_type):
+        """Helper to copy fields to a fresh message to avoid growable field issues."""
+        new_msg = msg_type()
+        for field in source.fields:
+            if (val := field.get_value()) is not None:
+                try: setattr(new_msg, field.name, val)
+                except: pass
+        return new_msg
+
+    def get_duration(session):
+        if session and session.timestamp and session.start_time:
+            return (session.timestamp - session.start_time) / 1000.0
+        return None
+
+    builder = FitFileBuilder(auto_define=True, min_string_size=50)
+    for record in fit_file.records:
+        msg = record.message
+        m_type = type(msg).__name__
+        
+        if m_type == 'FileIdMessage':
+            new_msg = FileIdMessage()
+            new_msg.type = getattr(msg, 'type', FileType.ACTIVITY)
+            new_msg.time_created = getattr(msg, 'time_created', int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000))
+            new_msg.manufacturer, new_msg.product, new_msg.serial_number = Manufacturer.GARMIN, 3843, 123456789
+            builder.add(new_msg)
+            
+        elif m_type == 'SessionMessage' and msg == target_session:
+            new_s = rebuild_msg(msg, SessionMessage)
+            if (dur := get_duration(new_s)) is not None:
+                new_s.total_elapsed_time = new_s.total_timer_time = dur
+            if max_ems is not None: new_s.enhanced_max_speed = max_ems
+            if max_ms is not None: new_s.max_speed = max_ms
+            new_s.message_index = 0
+            builder.add(new_s)
+            
+        elif m_type == 'ActivityMessage':
+            new_a = rebuild_msg(msg, ActivityMessage)
+            new_a.num_sessions = 1
+            if (dur := get_duration(target_session)) is not None:
+                new_a.total_timer_time = dur
+            builder.add(new_a)
+            
+        else:
+            builder.add(msg)
+            
+    builder.build().to_file(output_path)
+

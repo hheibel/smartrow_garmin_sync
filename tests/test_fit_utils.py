@@ -1,3 +1,4 @@
+import os
 import unittest
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -7,7 +8,9 @@ from fit_utils import (
     extract_time,
     extract_watts,
     convert_to_fit,
-    NS
+    NS,
+    rewrite_fit_file_attributes,
+    read_fit_file
 )
 
 class TestFitUtils(unittest.TestCase):
@@ -102,6 +105,60 @@ class TestFitUtils(unittest.TestCase):
         self.assertIsNotNone(fit_file)
         # Basic check: should have multiple records (messages) in the fit file
         self.assertTrue(len(fit_file.records) > 0)
+
+    def test_rewrite_fit_file_attributes(self) -> None:
+        input_path = os.path.join(os.path.dirname(__file__), 'test_data', '20251211_065506_2578614.fit')
+        output_path = os.path.join(os.path.dirname(__file__), 'test_data', 'rewritten_test.fit')
+        
+        # Ensure we don't accidentally use a stale output file
+        if os.path.exists(output_path):
+            os.remove(output_path)
+            
+        try:
+            rewrite_fit_file_attributes(input_path, output_path)
+            
+            # Read rewritten file and validate
+            rewritten_fit = read_fit_file(output_path)
+            
+            file_id_msg = None
+            session_msgs = []
+            activity_msg = None
+            for record in rewritten_fit.records:
+                if type(record.message).__name__ == 'FileIdMessage':
+                    file_id_msg = record.message
+                if type(record.message).__name__ == 'SessionMessage':
+                    session_msgs.append(record.message)
+                if type(record.message).__name__ == 'ActivityMessage':
+                    activity_msg = record.message
+                    
+            self.assertIsNotNone(file_id_msg)
+            self.assertEqual(getattr(file_id_msg, 'manufacturer', None), 1)
+            self.assertEqual(getattr(file_id_msg, 'product', None), 3843)
+            self.assertEqual(getattr(file_id_msg, 'serial_number', None), 123456789)
+            
+            # Verify deduplication: exactly one session should remain (source only had one anyway)
+            self.assertEqual(len(session_msgs), 1)
+            session_msg = session_msgs[0]
+            
+            # Verify the max_speed was correctly aggregated from LapMessages
+            self.assertAlmostEqual(getattr(session_msg, 'max_speed', None), 4.425, places=3)
+            
+            # Verify the duration was recalculated correctly based on wall-clock time
+            # Timestamp (End): 1765438420000, Start Time: 1765436106000
+            # Diff: 2314000ms = 2314.0s (38:34.000)
+            self.assertEqual(getattr(session_msg, 'total_elapsed_time', None), 2314.0)
+            self.assertEqual(getattr(session_msg, 'total_timer_time', None), 2314.0)
+            
+            # Verify correct indexing and activity header
+            self.assertEqual(getattr(session_msg, 'message_index', None), 0)
+            self.assertIsNotNone(activity_msg)
+            self.assertEqual(getattr(activity_msg, 'num_sessions', None), 1)
+            self.assertEqual(getattr(activity_msg, 'total_timer_time', None), 2314.0)
+        finally:
+            # Clean up
+            # if os.path.exists(output_path):
+            #     os.remove(output_path)
+            print(f"Cleaned up {output_path}")
 
 if __name__ == '__main__':
     unittest.main()

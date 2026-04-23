@@ -70,7 +70,7 @@ class TestSmartRowIntegration(unittest.TestCase):
             self.assertIsNotNone(public_id, "Activity is missing 'public_id'. TCX download requires public_id.")
             
             try:
-                tcx_data = client.get_activity_tcx(str(public_id))
+                tcx_data = client.get_activity(str(public_id), format="tcx")
             except Exception as e:
                 # Some activities might not have a TCX file, we can continue to the next
                 print(f"Failed to fetch TCX for activity {activity_id}: {e}")

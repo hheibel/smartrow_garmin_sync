@@ -221,7 +221,7 @@ class TestBuildFitFromCsv(unittest.TestCase):
 
             msg_types = [type(r.message).__name__ for r in fit.records]
             self.assertEqual(msg_types.count("FileIdMessage"), 1)
-            self.assertEqual(msg_types.count("RecordMessage"), len(csv_records))
+            self.assertEqual(msg_types.count("RecordMessage"), len(csv_records) + 2)
             self.assertEqual(msg_types.count("SessionMessage"), 1)
             self.assertEqual(msg_types.count("ActivityMessage"), 1)
             

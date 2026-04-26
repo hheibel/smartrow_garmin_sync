@@ -470,7 +470,7 @@ def build_fit_from_csv(
         return new_msg
 
     last_csv = csv_records[-1]
-    
+
     # Session bounds: Prefer template times if available to maintain full session duration
     if target_session:
         start_ms = target_session.start_time
@@ -478,7 +478,7 @@ def build_fit_from_csv(
     else:
         start_ms = csv_records[0].timestamp_ms
         end_ms = last_csv.timestamp_ms
-    
+
     duration_s = (end_ms - start_ms) / 1000.0
 
     # 3. Process template messages
@@ -491,21 +491,81 @@ def build_fit_from_csv(
         # Insert CSV records at the position of the first original record
         if m_type == "RecordMessage":
             if not records_inserted:
+                # 1. Add a record at the session start to ensure full duration
+                if csv_records[0].timestamp_ms > start_ms:
+                    start_rec = RecordMessage()
+                    start_rec.timestamp = start_ms
+                    start_rec.distance = 0.0
+                    if csv_records[0].heart_rate_bpm:
+                        start_rec.heart_rate = csv_records[0].heart_rate_bpm
+                    start_rec.power = 0
+                    start_rec.cadence = 0
+                    start_rec.speed = 0.0
+                    builder.add(start_rec)
+
+                # 2. Add all stroke records
                 for stroke in csv_records:
                     builder.add(stroke_to_fit_record(stroke))
+                
+                # 3. Add a record at the session end to ensure full duration
+                if last_csv.timestamp_ms < end_ms:
+                    end_rec = RecordMessage()
+                    end_rec.timestamp = end_ms
+                    end_rec.distance = last_csv.distance_m
+                    if last_csv.heart_rate_bpm:
+                        end_rec.heart_rate = last_csv.heart_rate_bpm
+                    end_rec.power = 0
+                    end_rec.cadence = 0
+                    end_rec.speed = 0.0
+                    builder.add(end_rec)
+
                 records_inserted = True
             continue
 
         # If we reach a message that usually follows records, and haven't inserted yet
-        if m_type in ("LapMessage", "SessionMessage", "ActivityMessage") and not records_inserted:
+        if (
+            m_type in ("LapMessage", "SessionMessage", "ActivityMessage")
+            and not records_inserted
+        ):
+            # Duplicate the insertion logic here for safety
+            if csv_records[0].timestamp_ms > start_ms:
+                start_rec = RecordMessage()
+                start_rec.timestamp = start_ms
+                start_rec.distance = 0.0
+                if csv_records[0].heart_rate_bpm:
+                    start_rec.heart_rate = csv_records[0].heart_rate_bpm
+                start_rec.power = 0
+                start_rec.cadence = 0
+                start_rec.speed = 0.0
+                builder.add(start_rec)
+
             for stroke in csv_records:
                 builder.add(stroke_to_fit_record(stroke))
+
+            if last_csv.timestamp_ms < end_ms:
+                end_rec = RecordMessage()
+                end_rec.timestamp = end_ms
+                end_rec.distance = last_csv.distance_m
+                if last_csv.heart_rate_bpm:
+                    end_rec.heart_rate = last_csv.heart_rate_bpm
+                end_rec.power = 0
+                end_rec.cadence = 0
+                end_rec.speed = 0.0
+                builder.add(end_rec)
+
             records_inserted = True
 
         if m_type == "FileIdMessage":
             new_msg = FileIdMessage()
             new_msg.type = getattr(msg, "type", FileType.ACTIVITY)
-            new_msg.time_created = getattr(msg, "time_created", int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000))
+            new_msg.time_created = getattr(
+                msg,
+                "time_created",
+                int(
+                    datetime.datetime.now(datetime.timezone.utc).timestamp()
+                    * 1000
+                ),
+            )
             new_msg.manufacturer = Manufacturer.GARMIN
             new_msg.product = 3843
             new_msg.serial_number = 123456789
@@ -517,14 +577,14 @@ def build_fit_from_csv(
             new_s.timestamp = end_ms
             new_s.total_elapsed_time = duration_s
             new_s.total_timer_time = duration_s
-            
+
             # We preserve existing summaries (avg power, HR, etc.) from the template
             # as they represent SmartRow's official time-averaged calculations.
             # We only ensure max values are at least as high as what we found in strokes.
             if max_hr is not None:
                 orig_max_hr = getattr(new_s, "max_heart_rate", 0) or 0
                 new_s.max_heart_rate = max(orig_max_hr, max_hr)
-            
+
             if max_spd is not None:
                 orig_max_spd = getattr(new_s, "enhanced_max_speed", 0.0) or 0.0
                 if max_spd > orig_max_spd:
@@ -541,8 +601,12 @@ def build_fit_from_csv(
             new_a.total_timer_time = duration_s
             builder.add(new_a)
 
+        elif m_type in ("WorkoutMessage", "WorkoutStepMessage"):
+            # Skip workout-related metadata that may not align with stroke-level records
+            continue
+
         else:
-            # Preserve all other messages (Laps, Events, Workouts, etc.)
+            # Preserve all other messages (Laps, Events, etc.)
             builder.add(msg)
 
     # Final safety check if file had no records/sessions (unlikely)

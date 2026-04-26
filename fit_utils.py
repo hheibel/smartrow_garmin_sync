@@ -470,8 +470,16 @@ def build_fit_from_csv(
         return new_msg
 
     last_csv = csv_records[-1]
-    start_ms = target_session.start_time if target_session else csv_records[0].timestamp_ms
-    duration_s = (last_csv.timestamp_ms - start_ms) / 1000.0
+    
+    # Session bounds: Prefer template times if available to maintain full session duration
+    if target_session:
+        start_ms = target_session.start_time
+        end_ms = target_session.timestamp
+    else:
+        start_ms = csv_records[0].timestamp_ms
+        end_ms = last_csv.timestamp_ms
+    
+    duration_s = (end_ms - start_ms) / 1000.0
 
     # 3. Process template messages
     records_inserted = False
@@ -506,33 +514,29 @@ def build_fit_from_csv(
         elif m_type == "SessionMessage" and msg == target_session:
             new_s = rebuild_msg(msg, SessionMessage)
             new_s.start_time = start_ms
-            new_s.timestamp = last_csv.timestamp_ms
+            new_s.timestamp = end_ms
             new_s.total_elapsed_time = duration_s
             new_s.total_timer_time = duration_s
-            # Use distance from CSV if available, otherwise keep original
-            new_s.total_distance = last_csv.distance_m
             
-            if avg_pwr is not None:
-                new_s.avg_power = round(avg_pwr)
-            if avg_hr is not None:
-                new_s.avg_heart_rate = round(avg_hr)
+            # We preserve existing summaries (avg power, HR, etc.) from the template
+            # as they represent SmartRow's official time-averaged calculations.
+            # We only ensure max values are at least as high as what we found in strokes.
             if max_hr is not None:
-                new_s.max_heart_rate = max_hr
-            if avg_cad is not None:
-                new_s.avg_cadence = round(avg_cad)
-            if avg_spd is not None:
-                new_s.avg_speed = avg_spd
-                new_s.enhanced_avg_speed = avg_spd
+                orig_max_hr = getattr(new_s, "max_heart_rate", 0) or 0
+                new_s.max_heart_rate = max(orig_max_hr, max_hr)
+            
             if max_spd is not None:
-                new_s.max_speed = max_spd
-                new_s.enhanced_max_speed = max_spd
+                orig_max_spd = getattr(new_s, "enhanced_max_speed", 0.0) or 0.0
+                if max_spd > orig_max_spd:
+                    new_s.max_speed = max_spd
+                    new_s.enhanced_max_speed = max_spd
 
             new_s.message_index = 0
             builder.add(new_s)
 
         elif m_type == "ActivityMessage":
             new_a = rebuild_msg(msg, ActivityMessage)
-            new_a.timestamp = last_csv.timestamp_ms
+            new_a.timestamp = end_ms
             new_a.num_sessions = 1
             new_a.total_timer_time = duration_s
             builder.add(new_a)

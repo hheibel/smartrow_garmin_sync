@@ -10,6 +10,7 @@ from absl import logging
 from fit_tool.fit_file_builder import FitFile
 from fit_tool.fit_file_builder import FitFileBuilder
 from fit_tool.profile.messages.activity_message import ActivityMessage
+from fit_tool.profile.messages.device_info_message import DeviceInfoMessage
 from fit_tool.profile.messages.file_id_message import FileIdMessage
 from fit_tool.profile.messages.record_message import RecordMessage
 from fit_tool.profile.messages.session_message import SessionMessage
@@ -30,6 +31,13 @@ NS = {
     "ns": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2",
     "ax": "http://www.garmin.com/xmlschemas/ActivityExtension/v2",
 }
+
+# Garmin Device Constants (Edge 1040 Solar)
+GARMIN_MANUFACTURER = Manufacturer.GARMIN
+GARMIN_PRODUCT = 3843
+GARMIN_SERIAL_NUMBER = 3442358385
+GARMIN_SOFTWARE_VERSION = 30.18
+
 
 
 def extract_time(trackpoint_element: ET.Element) -> int | None:
@@ -162,6 +170,10 @@ def stroke_to_fit_record(stroke: CsvStrokeRecord) -> RecordMessage:
         msg.speed = speed
         msg.enhanced_speed = speed
 
+    # Set altitude to 0 to help platforms render overview charts for indoor rowing
+    msg.altitude = 0.0
+    msg.enhanced_altitude = 0.0
+
     return msg
 
 
@@ -180,13 +192,23 @@ def convert_to_fit(tcx_string: str) -> FitFile:
     # Spoof Garmin Edge 1040 Solar
     file_id_message = FileIdMessage()
     file_id_message.type = FileType.ACTIVITY
-    file_id_message.manufacturer = Manufacturer.GARMIN
-    file_id_message.product = 3843
-    file_id_message.serial_number = 123456789
+    file_id_message.manufacturer = GARMIN_MANUFACTURER
+    file_id_message.product = GARMIN_PRODUCT
+    file_id_message.serial_number = GARMIN_SERIAL_NUMBER
     file_id_message.time_created = int(
         datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000
     )
     builder.add(file_id_message)
+
+    # Add Device Info Message
+    device_info_message = DeviceInfoMessage()
+    device_info_message.device_index = 0
+    device_info_message.manufacturer = GARMIN_MANUFACTURER
+    device_info_message.product = GARMIN_PRODUCT
+    device_info_message.serial_number = GARMIN_SERIAL_NUMBER
+    device_info_message.software_version = GARMIN_SOFTWARE_VERSION
+    device_info_message.timestamp = file_id_message.time_created
+    builder.add(device_info_message)
 
     activity_records: list[ActivityRecord] = []
 
@@ -245,6 +267,22 @@ def convert_to_fit(tcx_string: str) -> FitFile:
         if activity_records[-1].distance is not None
         else 0.0
     )
+
+    # Populate summary metrics
+    powers = [r.watts for r in activity_records if r.watts is not None]
+    hrs = [r.heart_rate for r in activity_records if r.heart_rate is not None]
+    cadences = [r.cadence for r in activity_records if r.cadence is not None]
+
+    if powers:
+        session_message.avg_power = round(sum(powers) / len(powers))
+        session_message.max_power = max(powers)
+    if hrs:
+        session_message.avg_heart_rate = round(sum(hrs) / len(hrs))
+        session_message.max_heart_rate = max(hrs)
+    if cadences:
+        session_message.avg_cadence = round(sum(cadences) / len(cadences))
+        session_message.max_cadence = max(cadences)
+
     builder.add(session_message)
 
     # Write Activity Message
@@ -369,6 +407,8 @@ def rewrite_fit_file_attributes(input_path: str, output_path: str) -> None:
         return None
 
     builder = FitFileBuilder(auto_define=True, min_string_size=50)
+    device_info_added = False
+
     for record in fit_file.records:
         msg = record.message
         m_type = type(msg).__name__
@@ -384,10 +424,29 @@ def rewrite_fit_file_attributes(input_path: str, output_path: str) -> None:
                     * 1000
                 ),
             )
-            new_msg.manufacturer = Manufacturer.GARMIN
-            new_msg.product = 3843
-            new_msg.serial_number = 123456789
+            new_msg.manufacturer = GARMIN_MANUFACTURER
+            new_msg.product = GARMIN_PRODUCT
+            new_msg.serial_number = GARMIN_SERIAL_NUMBER
             builder.add(new_msg)
+
+            # Add Device Info Message immediately after File ID
+            if not device_info_added:
+                device_info_message = DeviceInfoMessage()
+                device_info_message.device_index = 0
+                device_info_message.manufacturer = GARMIN_MANUFACTURER
+                device_info_message.product = GARMIN_PRODUCT
+                device_info_message.serial_number = GARMIN_SERIAL_NUMBER
+                device_info_message.software_version = GARMIN_SOFTWARE_VERSION
+                device_info_message.timestamp = new_msg.time_created
+                builder.add(device_info_message)
+                device_info_added = True
+
+        elif m_type == "DeviceInfoMessage":
+            # Skip existing device info messages if they are for the primary device (index 0)
+            # We already added our spoofed Garmin device info
+            if getattr(msg, "device_index", None) == 0:
+                continue
+            builder.add(msg)
 
         elif m_type == "SessionMessage" and msg == target_session:
             new_s = rebuild_msg(msg, SessionMessage)
@@ -483,6 +542,7 @@ def build_fit_from_csv(
 
     # 3. Process template messages
     records_inserted = False
+    device_info_added = False
 
     for record in fit_file.records:
         msg = record.message
@@ -566,10 +626,28 @@ def build_fit_from_csv(
                     * 1000
                 ),
             )
-            new_msg.manufacturer = Manufacturer.GARMIN
-            new_msg.product = 3843
-            new_msg.serial_number = 123456789
+            new_msg.manufacturer = GARMIN_MANUFACTURER
+            new_msg.product = GARMIN_PRODUCT
+            new_msg.serial_number = GARMIN_SERIAL_NUMBER
             builder.add(new_msg)
+
+            # Add Device Info Message immediately after File ID
+            if not device_info_added:
+                device_info_message = DeviceInfoMessage()
+                device_info_message.device_index = 0
+                device_info_message.manufacturer = GARMIN_MANUFACTURER
+                device_info_message.product = GARMIN_PRODUCT
+                device_info_message.serial_number = GARMIN_SERIAL_NUMBER
+                device_info_message.software_version = GARMIN_SOFTWARE_VERSION
+                device_info_message.timestamp = new_msg.time_created
+                builder.add(device_info_message)
+                device_info_added = True
+
+        elif m_type == "DeviceInfoMessage":
+            # Skip existing device info messages if they are for the primary device (index 0)
+            if getattr(msg, "device_index", None) == 0:
+                continue
+            builder.add(msg)
 
         elif m_type == "SessionMessage" and msg == target_session:
             new_s = rebuild_msg(msg, SessionMessage)
@@ -578,18 +656,31 @@ def build_fit_from_csv(
             new_s.total_elapsed_time = duration_s
             new_s.total_timer_time = duration_s
 
-            # We preserve existing summaries (avg power, HR, etc.) from the template
-            # as they represent SmartRow's official time-averaged calculations.
-            # We only ensure max values are at least as high as what we found in strokes.
-            if max_hr is not None:
-                orig_max_hr = getattr(new_s, "max_heart_rate", 0) or 0
-                new_s.max_heart_rate = max(orig_max_hr, max_hr)
+            # Explicitly set sport/sub_sport for better platform compatibility
+            new_s.sport = Sport.ROWING
+            new_s.sub_sport = SubSport.INDOOR_ROWING
 
+            # Populate summary metrics from CSV data
+            if avg_pwr is not None:
+                new_s.avg_power = round(avg_pwr)
+            if powers:
+                new_s.max_power = max(powers)
+            
+            if avg_hr is not None:
+                new_s.avg_heart_rate = round(avg_hr)
+            if max_hr is not None:
+                new_s.max_heart_rate = max_hr
+
+            if avg_cad is not None:
+                new_s.avg_cadence = round(avg_cad)
+            if cadences:
+                new_s.max_cadence = max(cadences)
+
+            if avg_spd is not None:
+                new_s.enhanced_avg_speed = avg_spd
             if max_spd is not None:
-                orig_max_spd = getattr(new_s, "enhanced_max_speed", 0.0) or 0.0
-                if max_spd > orig_max_spd:
-                    new_s.max_speed = max_spd
-                    new_s.enhanced_max_speed = max_spd
+                new_s.enhanced_max_speed = max_spd
+                new_s.max_speed = max_spd
 
             new_s.message_index = 0
             builder.add(new_s)

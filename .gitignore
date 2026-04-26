@@ -6,3 +6,5 @@ venv/
 **/*.fit
 **/*.json
 **/*.csv
+scratch/
+.agent/sessions/*

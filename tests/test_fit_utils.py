@@ -146,7 +146,7 @@ class TestFitUtils(unittest.TestCase):
             self.assertEqual(getattr(file_id_msg, "manufacturer", None), 1)
             self.assertEqual(getattr(file_id_msg, "product", None), 3843)
             self.assertEqual(
-                getattr(file_id_msg, "serial_number", None), 123456789
+                getattr(file_id_msg, "serial_number", None), 3442358385
             )
 
             # Verify deduplication: exactly one session should remain (source only had one anyway)

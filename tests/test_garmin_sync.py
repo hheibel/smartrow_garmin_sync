@@ -107,14 +107,15 @@ class TestGarminSync(unittest.TestCase):
         mock_bucket.blob.side_effect = mock_blob
 
         # mock returns True if sec == 99
-        mock_check_overlap.side_effect = lambda dt, sec, garmin: (
-            True if sec == 99 else False
-        )
+        mock_check_overlap.side_effect = lambda dt, sec, garmin: sec == 99
 
         filtered = filter_duplicates([a1, a2], [], mock_bucket)
         self.assertEqual(len(filtered), 1)
         self.assertEqual(filtered[0].base_name, "unique")
 
+    @patch("garmin_sync.build_fit_from_csv")
+    @patch("garmin_sync.parse_smartrow_csv")
+    @patch("garmin_sync.extract_session_metadata")
     @patch("garmin_sync.rewrite_fit_file_attributes")
     @patch("garmin_sync.update_last_garmin_sync_time")
     @patch("garmin_sync.storage.Client")
@@ -127,6 +128,9 @@ class TestGarminSync(unittest.TestCase):
         mock_storage_client_class,
         mock_update_last_sync,
         mock_rewrite,
+        mock_extract_meta,
+        mock_parse_csv,
+        mock_build_fit,
     ) -> None:
         # Setup today for consistent testing (let's say 2026-03-30)
         today = datetime(2026, 3, 30, 12, 0, 0, tzinfo=timezone.utc)
@@ -158,6 +162,9 @@ class TestGarminSync(unittest.TestCase):
                     b.download_as_text.return_value = (
                         '{"last_synced_created": "2026-03-16T12:00:00Z"}'
                     )
+                elif name.endswith(".csv"):
+                    # No CSV available -> exercises the rewrite fallback path
+                    b.exists.return_value = False
                 else:
                     b.exists.return_value = True
                     b.download_as_bytes.return_value = b"data"
@@ -189,8 +196,9 @@ class TestGarminSync(unittest.TestCase):
 
             sync_to_garmin()
 
-            # Should have uploaded exactly two files
-            self.assertEqual(mock_garmin.upload_activity.call_count, 2)
+            # blob1 (2026-03-01, 29 days ago) falls outside 3-week window.
+            # blob2 (2026-03-10), blob3 (2026-03-20), blob4 (2026-03-25) pass.
+            self.assertEqual(mock_garmin.upload_activity.call_count, 3)
 
             # Verify latest state was updated to 2026-03-25
             mock_update_last_sync.assert_called_with(

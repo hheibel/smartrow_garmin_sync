@@ -175,8 +175,8 @@ class TestSmartRowSync(unittest.TestCase):
         sync_smartrow_activities()
 
         # Should only process activities newer than 2026-03-01T00:00:00Z
-        # So it should upload id 2 and id 3. JSON + FIT for each -> 4 uploads
-        self.assertEqual(mock_upload_to_gcs.call_count, 4)
+        # id 2 and id 3 each produce JSON + FIT + CSV uploads -> 6 total.
+        self.assertEqual(mock_upload_to_gcs.call_count, 6)
 
         # Verify it fetched FIT for id 2 and id 3 using their public_ids
         mock_smartrow_client.get_activity.assert_any_call(
@@ -186,6 +186,13 @@ class TestSmartRowSync(unittest.TestCase):
             "uuid-3", format="fit"
         )
         self.assertEqual(mock_smartrow_client.get_activity.call_count, 2)
+
+        # Verify CSV was fetched for id 2 and id 3
+        mock_smartrow_client.get_activity_csv.assert_any_call("uuid-2")
+        mock_smartrow_client.get_activity_csv.assert_any_call("uuid-3")
+        self.assertEqual(
+            mock_smartrow_client.get_activity_csv.call_count, 2
+        )
 
         # Verify last synced time was updated with the newest item's timestamp
         mock_update_last_synced.assert_called_with(

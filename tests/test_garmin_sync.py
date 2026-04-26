@@ -115,7 +115,6 @@ class TestGarminSync(unittest.TestCase):
 
     @patch("garmin_sync.build_fit_from_csv")
     @patch("garmin_sync.parse_smartrow_csv")
-    @patch("garmin_sync.extract_session_metadata")
     @patch("garmin_sync.rewrite_fit_file_attributes")
     @patch("garmin_sync.update_last_garmin_sync_time")
     @patch("garmin_sync.storage.Client")
@@ -128,7 +127,6 @@ class TestGarminSync(unittest.TestCase):
         mock_storage_client_class,
         mock_update_last_sync,
         mock_rewrite,
-        mock_extract_meta,
         mock_parse_csv,
         mock_build_fit,
     ) -> None:

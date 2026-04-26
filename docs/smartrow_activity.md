@@ -55,3 +55,26 @@ Below is a breakdown of all fields available in a SmartRow activity object:
 *   **`calc_ave_split`** (Integer): Calculated average split time (typically in seconds per 500m).
 *   **`calc_avg_stroke_work`** (Integer): Calculated average work per stroke in Joules.
 *   **`calc_avg_stroke_rate`** (Float): Calculated average stroke rate (strokes per minute).
+## Data Quality & Synchronization Issues
+
+Synchronizing SmartRow data to platforms like Garmin Connect reveals several inconsistencies in how SmartRow exports its data.
+
+### 1. Timing Misalignment (FIT vs. CSV)
+SmartRow exports two primary formats: a summary FIT file and a per-stroke CSV file. In many cases (especially interval workouts), these two files are **not synchronized in time**.
+- **The Issue**: Stroke records in the CSV may end several minutes before the "Session End" time recorded in the FIT file.
+- **The Impact**: Merging CSV stroke data into a FIT template can result in "empty" laps at the end of the activity or strokes being assigned to the wrong laps.
+- **Decision**: Due to these inconsistencies, the synchronization tool defaults to **dropping all Laps** and presenting the activity as a single continuous session.
+
+### 2. The "Double Duration" Bug
+Garmin Connect may display double the actual duration (e.g., 40 minutes for a 20-minute row) if metadata fields are inconsistent.
+- **Cause**: This happens if `SessionMessage.total_elapsed_time` does not exactly match the time difference between the first and last `RecordMessage` timestamps.
+- **Fix**: The tool recalculates session duration strictly based on the actual record span to prevent this bug.
+
+### 3. Missing Metadata in Exports
+SmartRow's standard exports often omit critical Garmin metrics such as:
+- Training Effect (Aerobic/Anaerobic)
+- Total Strokes
+- Accumulated Power (Work)
+- `Sport` and `SubSport` definitions
+
+The `smartrow_garmin_sync` tool enriches the files with these fields where possible.

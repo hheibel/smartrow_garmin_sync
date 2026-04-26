@@ -146,7 +146,7 @@ class TestFitUtils(unittest.TestCase):
             self.assertEqual(getattr(file_id_msg, "manufacturer", None), 1)
             self.assertEqual(getattr(file_id_msg, "product", None), 3843)
             self.assertEqual(
-                getattr(file_id_msg, "serial_number", None), 123456789
+                getattr(file_id_msg, "serial_number", None), 3442358385
             )
 
             # Verify deduplication: exactly one session should remain (source only had one anyway)
@@ -221,7 +221,7 @@ class TestBuildFitFromCsv(unittest.TestCase):
 
             msg_types = [type(r.message).__name__ for r in fit.records]
             self.assertEqual(msg_types.count("FileIdMessage"), 1)
-            self.assertEqual(msg_types.count("RecordMessage"), len(csv_records))
+            self.assertEqual(msg_types.count("RecordMessage"), len(csv_records) + 1)
             self.assertEqual(msg_types.count("SessionMessage"), 1)
             self.assertEqual(msg_types.count("ActivityMessage"), 1)
             

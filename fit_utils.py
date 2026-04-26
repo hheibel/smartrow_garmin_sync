@@ -170,10 +170,6 @@ def stroke_to_fit_record(stroke: CsvStrokeRecord) -> RecordMessage:
         msg.speed = speed
         msg.enhanced_speed = speed
 
-    # Set altitude to 0 to help platforms render overview charts for indoor rowing
-    msg.altitude = 0.0
-    msg.enhanced_altitude = 0.0
-
     return msg
 
 
@@ -564,20 +560,13 @@ def build_fit_from_csv(
                     builder.add(start_rec)
 
                 # 2. Add all stroke records
-                for stroke in csv_records:
-                    builder.add(stroke_to_fit_record(stroke))
-                
-                # 3. Add a record at the session end to ensure full duration
-                if last_csv.timestamp_ms < end_ms:
-                    end_rec = RecordMessage()
-                    end_rec.timestamp = end_ms
-                    end_rec.distance = last_csv.distance_m
-                    if last_csv.heart_rate_bpm:
-                        end_rec.heart_rate = last_csv.heart_rate_bpm
-                    end_rec.power = 0
-                    end_rec.cadence = 0
-                    end_rec.speed = 0.0
-                    builder.add(end_rec)
+                for i, stroke in enumerate(csv_records):
+                    fit_rec = stroke_to_fit_record(stroke)
+                    # If this is the last record and we need to fix the session duration,
+                    # adjust its timestamp to match end_ms.
+                    if i == len(csv_records) - 1 and fit_rec.timestamp < end_ms:
+                        fit_rec.timestamp = end_ms
+                    builder.add(fit_rec)
 
                 records_inserted = True
             continue
@@ -599,19 +588,11 @@ def build_fit_from_csv(
                 start_rec.speed = 0.0
                 builder.add(start_rec)
 
-            for stroke in csv_records:
-                builder.add(stroke_to_fit_record(stroke))
-
-            if last_csv.timestamp_ms < end_ms:
-                end_rec = RecordMessage()
-                end_rec.timestamp = end_ms
-                end_rec.distance = last_csv.distance_m
-                if last_csv.heart_rate_bpm:
-                    end_rec.heart_rate = last_csv.heart_rate_bpm
-                end_rec.power = 0
-                end_rec.cadence = 0
-                end_rec.speed = 0.0
-                builder.add(end_rec)
+            for i, stroke in enumerate(csv_records):
+                fit_rec = stroke_to_fit_record(stroke)
+                if i == len(csv_records) - 1 and fit_rec.timestamp < end_ms:
+                    fit_rec.timestamp = end_ms
+                builder.add(fit_rec)
 
             records_inserted = True
 
@@ -702,7 +683,10 @@ def build_fit_from_csv(
 
     # Final safety check if file had no records/sessions (unlikely)
     if not records_inserted:
-        for stroke in csv_records:
-            builder.add(stroke_to_fit_record(stroke))
+        for i, stroke in enumerate(csv_records):
+            fit_rec = stroke_to_fit_record(stroke)
+            if i == len(csv_records) - 1 and fit_rec.timestamp < end_ms:
+                fit_rec.timestamp = end_ms
+            builder.add(fit_rec)
 
     builder.build().to_file(output_path)

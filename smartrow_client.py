@@ -1,3 +1,5 @@
+"""HTTP client for the SmartRow API with session-based authentication."""
+
 import base64
 from typing import Any
 
@@ -9,10 +11,12 @@ from utils import read_credentials
 
 class SmartRowClient:
     """A client for the SmartRow API.
+
     Handles authentication and data fetching.
     """
 
     def __init__(self) -> None:
+        """Initialises the client and loads credentials from Secret Manager."""
         self.base_url = "https://smartrow.fit"
         self.username, self.password = read_credentials("smartrow-credentials")
         self.session: requests.Session | None = None
@@ -129,6 +133,43 @@ class SmartRowClient:
         except requests.exceptions.RequestException as e:
             logging.error(
                 "Failed to fetch activity details for public ID %s: %s",
+                public_id,
+                e,
+            )
+            raise
+
+    def get_activity_csv(self, public_id: str) -> bytes:
+        """Fetches the per-stroke CSV export for an activity.
+
+        Downloads from ``/api/export/csv-us/<public_id>`` using the same
+        authenticated session as the FIT/TCX endpoints. The CSV contains one
+        row per rowing stroke with power, heart rate, split, and force-curve
+        data.
+
+        Args:
+            public_id: The public UUID string of the activity.
+
+        Returns:
+            The raw bytes of the CSV file.
+
+        Raises:
+            requests.exceptions.RequestException: If the download fails.
+        """
+        if not self.session:
+            self._login()
+
+        csv_url = f"{self.base_url}/api/export/csv-us/{public_id}"
+
+        try:
+            if self.session:
+                response = self.session.get(csv_url)
+                response.raise_for_status()
+                return bytes(response.content)
+            return b""
+
+        except requests.exceptions.RequestException as e:
+            logging.error(
+                "Failed to fetch CSV for public ID %s: %s",
                 public_id,
                 e,
             )

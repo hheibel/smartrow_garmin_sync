@@ -9,6 +9,8 @@ from fit_utils import extract_watts
 from fit_utils import parse_iso_time_ms
 from fit_utils import read_fit_file
 from fit_utils import rewrite_fit_file_attributes
+from fit_utils import build_fit_from_csv
+from csv_utils import parse_smartrow_csv, CsvStrokeRecord
 
 
 class TestFitUtils(unittest.TestCase):
@@ -178,6 +180,61 @@ class TestFitUtils(unittest.TestCase):
             # if os.path.exists(output_path):
             #     os.remove(output_path)
             print(f"Cleaned up {output_path}")
+
+
+class TestBuildFitFromCsv(unittest.TestCase):
+    def _sample_csv_bytes(self) -> bytes:
+        path = os.path.join(
+            os.path.dirname(__file__), "test_data", "sample_activity.csv"
+        )
+        with open(path, "rb") as fh:
+            return fh.read()
+
+    def _sample_fit_path(self) -> str:
+        return os.path.join(
+            os.path.dirname(__file__), "test_data", "20251211_065506_2578614.fit"
+        )
+
+    def test_build_produces_fit_file(self) -> None:
+        csv_records = parse_smartrow_csv(self._sample_csv_bytes())
+        
+        # Shift CSV records to match FIT template start time (2025-12-11)
+        # Template start: 1765436106000
+        fit_start = 1765436106000
+        shift = fit_start + 2000 - csv_records[0].timestamp_ms
+        for r in csv_records:
+            r.timestamp_ms += shift
+
+        output_path = os.path.join(
+            os.path.dirname(__file__), "test_data", "build_from_csv_test.fit"
+        )
+        
+        if os.path.exists(output_path):
+            os.remove(output_path)
+
+        try:
+            build_fit_from_csv(self._sample_fit_path(), csv_records, output_path)
+            
+            self.assertTrue(os.path.exists(output_path))
+            fit = read_fit_file(output_path)
+            self.assertGreater(len(fit.records), 0)
+
+            msg_types = [type(r.message).__name__ for r in fit.records]
+            self.assertEqual(msg_types.count("FileIdMessage"), 1)
+            self.assertEqual(msg_types.count("RecordMessage"), len(csv_records))
+            self.assertEqual(msg_types.count("SessionMessage"), 1)
+            self.assertEqual(msg_types.count("ActivityMessage"), 1)
+            
+            # Check for preserved LapMessage (original had one)
+            self.assertGreaterEqual(msg_types.count("LapMessage"), 1)
+            
+        finally:
+            if os.path.exists(output_path):
+                os.remove(output_path)
+
+    def test_raises_on_empty_records(self) -> None:
+        with self.assertRaises(ValueError):
+            build_fit_from_csv(self._sample_fit_path(), [], "dummy.fit")
 
 
 if __name__ == "__main__":

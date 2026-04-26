@@ -1,3 +1,5 @@
+"""Synchronises processed FIT activity files from GCS to Garmin Connect."""
+
 import json
 import os
 import tempfile
@@ -12,6 +14,8 @@ from google.cloud import storage
 
 from config import GCS_BUCKET_NAME
 from config import PROJECT_ID
+from csv_utils import parse_smartrow_csv
+from fit_utils import build_fit_from_csv
 from fit_utils import rewrite_fit_file_attributes
 from utils import init_garmin_client
 
@@ -27,11 +31,18 @@ class ActivityData:
 
     @property
     def fit_file(self) -> str:
+        """Returns the GCS filename for the FIT file."""
         return f"{self.base_name}.fit"
 
     @property
     def json_file(self) -> str:
+        """Returns the GCS filename for the JSON metadata file."""
         return f"{self.base_name}.json"
+
+    @property
+    def csv_file(self) -> str:
+        """Returns the GCS filename for the per-stroke CSV file."""
+        return f"{self.base_name}.csv"
 
 
 def get_last_garmin_sync_time(bucket: storage.Bucket) -> str:
@@ -272,7 +283,7 @@ def sync_to_garmin() -> None:
 
     activities.sort(key=lambda x: x.created)
     activities = filter_recent(activities, weeks=3)
-    activities = filter_already_synced(activities, last_synced_dt)
+    # activities = filter_already_synced(activities, last_synced_dt)
     activities = filter_duplicates(activities, garmin_activities, bucket)
 
     if not activities:
@@ -298,7 +309,33 @@ def sync_to_garmin() -> None:
                 processed_fit_path = os.path.join(tmp_dir, activity.fit_file)
 
                 blob.download_to_filename(raw_fit_path)
-                rewrite_fit_file_attributes(raw_fit_path, processed_fit_path)
+
+                csv_blob = bucket.blob(activity.csv_file)
+                if csv_blob.exists():
+                    # Build enriched FIT from per-stroke CSV data
+                    logging.info(
+                        "CSV found for %s — building enriched FIT.",
+                        activity.fit_file,
+                    )
+                    csv_path = os.path.join(tmp_dir, activity.csv_file)
+                    csv_blob.download_to_filename(csv_path)
+                    with open(csv_path, "rb") as csv_fh:
+                        csv_bytes = csv_fh.read()
+                    csv_records = parse_smartrow_csv(csv_bytes)
+                    build_fit_from_csv(
+                        template_path=raw_fit_path,
+                        csv_records=csv_records,
+                        output_path=processed_fit_path,
+                    )
+                else:
+                    # Fallback: rewrite attributes on the original FIT
+                    logging.info(
+                        "No CSV for %s — falling back to attribute rewrite.",
+                        activity.fit_file,
+                    )
+                    rewrite_fit_file_attributes(
+                        raw_fit_path, processed_fit_path
+                    )
 
                 client.upload_activity(processed_fit_path)
                 logging.info("Successfully uploaded %s.", activity.fit_file)

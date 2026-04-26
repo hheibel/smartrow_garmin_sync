@@ -1,3 +1,5 @@
+"""Downloads SmartRow activities and stores FIT and CSV files in GCS."""
+
 import json
 from datetime import datetime
 
@@ -18,7 +20,8 @@ def get_last_synced_time(bucket: storage.Bucket) -> str:
         bucket: The GCS bucket containing the sync state.
 
     Returns:
-        The ISO timestamp of the last synced activity, or an empty string if not found.
+        The ISO timestamp of the last synced activity, or an empty
+        string if not found.
     """
     blob = bucket.blob(SYNC_STATE_FILE)
     if blob.exists():
@@ -28,7 +31,8 @@ def get_last_synced_time(bucket: storage.Bucket) -> str:
             return str(data.get("last_synced_created", ""))
         except Exception as e:
             logging.warning(
-                "Failed to parse sync state file from GCS: %s. Treating as empty.",
+                "Failed to parse sync state file from GCS: %s."
+                " Treating as empty.",
                 e,
             )
     return ""
@@ -106,7 +110,9 @@ def upload_to_gcs(
         upload_to_gcs(bucket, "data.json", json.dumps(data), "application/json")
 
         # Binary (bytes)
-        upload_to_gcs(bucket, "activity.fit", fit_bytes, "application/octet-stream")
+        upload_to_gcs(
+            bucket, "activity.fit", fit_bytes, "application/octet-stream"
+        )
     """
     blob = bucket.blob(filename)
     blob.upload_from_string(content, content_type=content_type)
@@ -172,7 +178,8 @@ def sync_smartrow_activities() -> None:
 
         if not activity_id or not created_str or not public_id:
             logging.warning(
-                "Skipping activity due to missing id, public_id or created timestamp: %s",
+                "Skipping activity due to missing id, public_id"
+                " or created timestamp: %s",
                 activity,
             )
             continue
@@ -203,12 +210,31 @@ def sync_smartrow_activities() -> None:
 
         except Exception as e:
             logging.error(
-                "Unexpected error processing FIT for activity %s (created date: %s): %s",
+                "Unexpected error processing FIT for activity %s"
+                " (created date: %s): %s",
                 activity_id,
                 created_str,
                 e,
             )
             # Continue processing next activities even if one fails
+
+        # Fetch and upload per-stroke CSV from SmartRow
+        csv_filename = format_filename(created_str, int(activity_id), "csv")
+        try:
+            csv_data = client.get_activity_csv(str(public_id))
+            if csv_data:
+                upload_to_gcs(bucket, csv_filename, csv_data, "text/csv")
+            else:
+                logging.warning(
+                    "No CSV data returned for activity %s.", activity_id
+                )
+        except Exception as e:
+            logging.error(
+                "Unexpected error fetching CSV for activity %s: %s",
+                activity_id,
+                e,
+            )
+            # Continue — a missing CSV only affects FIT enrichment quality
 
         highest_synced = max(highest_synced, created_str)
 

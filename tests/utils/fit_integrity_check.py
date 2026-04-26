@@ -206,6 +206,81 @@ def check_record_messages(messages: list[Any]) -> bool:
     return not has_error
 
 
+def check_session_summary_vs_records(messages: list[Any]) -> bool:
+    """Checks SessionMessage summaries against aggregated RecordMessage data.
+
+    This check identifies potential discrepancies between session-level
+    averages and the underlying per-stroke data. Note that SmartRow uses
+    time-averaging over the full session duration, so simple stroke-averages
+    may differ by 10-15%.
+
+    Args:
+        messages: List of messages extracted from the FIT file.
+
+    Returns:
+        True if the discrepancies are within acceptable bounds, False otherwise.
+    """
+    session_msgs = [m for m in messages if type(m).__name__ == "SessionMessage"]
+    record_msgs = [m for m in messages if type(m).__name__ == "RecordMessage"]
+
+    if not session_msgs or not record_msgs:
+        return True
+
+    msg = session_msgs[0]
+    has_warning = False
+
+    # 1. Aggregate Record metrics
+    def _avg(vals: list[float | int]) -> float | None:
+        return sum(vals) / len(vals) if vals else None
+
+    powers = [getattr(r, "power", None) for r in record_msgs if getattr(r, "power", None) is not None]
+    hrs = [getattr(r, "heart_rate", None) for r in record_msgs if getattr(r, "heart_rate", None) is not None]
+    cadences = [getattr(r, "cadence", None) for r in record_msgs if getattr(r, "cadence", None) is not None]
+    
+    stroke_avg_pwr = _avg(powers)
+    stroke_avg_hr = _avg(hrs)
+    stroke_avg_cad = _avg(cadences)
+
+    # 2. Compare against Session Message
+    session_avg_pwr = getattr(msg, "avg_power", None)
+    session_avg_hr = getattr(msg, "avg_heart_rate", None)
+    session_avg_cad = getattr(msg, "avg_cadence", None)
+    timer_time = getattr(msg, "total_timer_time", 0)
+
+    logging.info("--- Session Summary vs Records ---")
+    
+    if session_avg_pwr and stroke_avg_pwr:
+        diff_pct = abs(session_avg_pwr - stroke_avg_pwr) / session_avg_pwr
+        logging.info("Power: Session Avg=%d W, Stroke Avg=%.1f W (diff=%.1f%%)", 
+                     session_avg_pwr, stroke_avg_pwr, diff_pct * 100)
+        if diff_pct > 0.25: # Large discrepancy
+            logging.error("Large Power discrepancy detected (> 25%).")
+            has_warning = True
+
+    if session_avg_hr and stroke_avg_hr:
+        diff = abs(session_avg_hr - stroke_avg_hr)
+        logging.info("HR: Session Avg=%d bpm, Stroke Avg=%.1f bpm (diff=%.1f bpm)", 
+                     session_avg_hr, stroke_avg_hr, diff)
+
+    if session_avg_cad and stroke_avg_cad:
+        diff_pct = abs(session_avg_cad - stroke_avg_cad) / session_avg_cad
+        logging.info("Cadence: Session Avg=%d spm, Stroke Avg=%.1f spm (diff=%.1f%%)", 
+                     session_avg_cad, stroke_avg_cad, diff_pct * 100)
+
+    # 3. Check Total Work consistency
+    total_work = getattr(msg, "total_work", None)
+    if total_work and session_avg_pwr and timer_time:
+        # P = W / t => W = P * t
+        expected_work = session_avg_pwr * timer_time
+        diff_pct = abs(total_work - expected_work) / total_work
+        logging.info("Work: Session Total=%d J, Calc (AvgPwr * Time)=%.1f J (diff=%.1f%%)",
+                     total_work, expected_work, diff_pct * 100)
+        if diff_pct > 0.1:
+            logging.warning("Total work inconsistent with average power and time.")
+
+    return not has_warning
+
+
 def main(argv: Sequence[str]) -> None:
     """Main integrity check execution loop."""
     del argv  # Unused
@@ -234,6 +309,7 @@ def main(argv: Sequence[str]) -> None:
     valid &= check_activity_message(messages)
     valid &= check_session_message(messages)
     valid &= check_record_messages(messages)
+    valid &= check_session_summary_vs_records(messages)
 
     if valid:
         logging.info("FIT file integrity is SUCCESSFUL.")

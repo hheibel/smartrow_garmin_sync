@@ -21,6 +21,8 @@ from fit_tool.profile.profile_type import Manufacturer
 from fit_tool.profile.profile_type import Sport
 from fit_tool.profile.profile_type import SubSport
 
+from csv_utils import CsvStrokeRecord
+
 # 1. Namespace Definitions
 # 'ns' is the standard TCX namespace (for Trackpoint, Time, etc.)
 # 'ax' (Activity Extension) is the namespace for TPX, Watts, Speed
@@ -133,6 +135,36 @@ class ActivityRecord:
         return msg
 
 
+def stroke_to_fit_record(stroke: CsvStrokeRecord) -> RecordMessage:
+    """Converts a CsvStrokeRecord into a FIT RecordMessage.
+
+    Args:
+        stroke: The per-stroke record from CSV.
+
+    Returns:
+        A RecordMessage populated with available stroke metrics.
+    """
+    msg = RecordMessage()
+    msg.timestamp = stroke.timestamp_ms
+    msg.distance = stroke.distance_m
+
+    if stroke.actual_power_w is not None:
+        msg.power = round(stroke.actual_power_w)
+
+    if stroke.heart_rate_bpm is not None:
+        msg.heart_rate = stroke.heart_rate_bpm
+
+    if stroke.stroke_rate_spm is not None:
+        msg.cadence = round(stroke.stroke_rate_spm)
+
+    speed = stroke.speed_mps()
+    if speed is not None:
+        msg.speed = speed
+        msg.enhanced_speed = speed
+
+    return msg
+
+
 def convert_to_fit(tcx_string: str) -> FitFile:
     """Converts a TCX XML string into a Garmin-compatible FitFile object.
 
@@ -238,6 +270,46 @@ def save_fit_file(fit_file: FitFile, output_path: str) -> None:
     logging.info("Done! File saved as: %s", output_path)
 
 
+def extract_session_metadata(input_path: str) -> dict[str, Any]:
+    """Extracts session anchoring metadata from a FIT file.
+
+    Reads the first SessionMessage found in the FIT file and returns its
+    start time, total distance, and total elapsed time. These values are used
+    to anchor a CSV-based FIT rebuild to the correct absolute timestamp and
+    distance totals from the original SmartRow FIT file.
+
+    Args:
+        input_path: Path to the FIT file to inspect.
+
+    Returns:
+        A dict with the following keys:
+        - ``start_time_ms`` (int): Session start time in ms since epoch.
+        - ``total_distance_m`` (float): Total distance in metres.
+        - ``total_elapsed_time_s`` (float): Total elapsed time in seconds.
+
+    Raises:
+        ValueError: If no SessionMessage is found in the FIT file.
+    """
+    fit_file = read_fit_file(input_path)
+    for record in fit_file.records:
+        if type(record.message).__name__ == "SessionMessage":
+            msg = record.message
+            start_time_ms = getattr(msg, "start_time", None)
+            if start_time_ms is not None:
+                return {
+                    "start_time_ms": int(start_time_ms),
+                    "total_distance_m": float(
+                        getattr(msg, "total_distance", 0.0) or 0.0
+                    ),
+                    "total_elapsed_time_s": float(
+                        getattr(msg, "total_elapsed_time", 0.0) or 0.0
+                    ),
+                }
+    raise ValueError(
+        f"No SessionMessage with a start_time found in FIT file: {input_path}"
+    )
+
+
 def read_fit_file(input_path: str) -> FitFile:
     """Reads a FIT file from disk and returns a FitFile object.
 
@@ -338,5 +410,144 @@ def rewrite_fit_file_attributes(input_path: str, output_path: str) -> None:
 
         else:
             builder.add(msg)
+
+    builder.build().to_file(output_path)
+
+
+def build_fit_from_csv(
+    template_path: str, csv_records: list[CsvStrokeRecord], output_path: str
+) -> None:
+    """Builds an enriched FIT file using a template and CSV stroke data.
+
+    This function mimics rewrite_fit_file_attributes by using an original FIT
+    file as a template. It preserves metadata messages (laps, events, workouts)
+    while replacing all RecordMessages with those derived from the CSV data.
+    Session and Activity messages are updated with aggregated CSV metrics.
+
+    Args:
+        template_path: Path to the original SmartRow FIT file.
+        csv_records: List of per-stroke records parsed from the CSV.
+        output_path: Path where the enriched FIT file will be saved.
+
+    Raises:
+        ValueError: If csv_records is empty.
+    """
+    if not csv_records:
+        raise ValueError("Cannot build FIT file from empty CSV records.")
+
+    fit_file = read_fit_file(template_path)
+    builder = FitFileBuilder(auto_define=True, min_string_size=50)
+
+    # 1. Aggregate metrics from CSV records
+    def _avg(values: list[float | int]) -> float | None:
+        return sum(values) / len(values) if values else None
+
+    powers = [r.actual_power_w for r in csv_records if r.actual_power_w]
+    hrs = [r.heart_rate_bpm for r in csv_records if r.heart_rate_bpm]
+    cadences = [r.stroke_rate_spm for r in csv_records if r.stroke_rate_spm]
+    speeds = [s for r in csv_records if (s := r.speed_mps())]
+
+    avg_pwr = _avg(powers)
+    avg_hr = _avg(hrs)
+    max_hr = max(hrs) if hrs else None
+    avg_cad = _avg(cadences)
+    avg_spd = _avg(speeds)
+    max_spd = max(speeds) if speeds else None
+
+    # 2. Identify the target session (first session in the template)
+    target_session: SessionMessage | None = None
+    for record in fit_file.records:
+        if type(record.message).__name__ == "SessionMessage":
+            target_session = record.message
+            break
+
+    def rebuild_msg(source: Any, msg_type: Any) -> Any:
+        new_msg = msg_type()
+        for field in source.fields:
+            if (val := field.get_value()) is not None:
+                with suppress(AttributeError, ValueError):
+                    setattr(new_msg, field.name, val)
+        return new_msg
+
+    last_csv = csv_records[-1]
+    
+    # Session bounds: Prefer template times if available to maintain full session duration
+    if target_session:
+        start_ms = target_session.start_time
+        end_ms = target_session.timestamp
+    else:
+        start_ms = csv_records[0].timestamp_ms
+        end_ms = last_csv.timestamp_ms
+    
+    duration_s = (end_ms - start_ms) / 1000.0
+
+    # 3. Process template messages
+    records_inserted = False
+
+    for record in fit_file.records:
+        msg = record.message
+        m_type = type(msg).__name__
+
+        # Insert CSV records at the position of the first original record
+        if m_type == "RecordMessage":
+            if not records_inserted:
+                for stroke in csv_records:
+                    builder.add(stroke_to_fit_record(stroke))
+                records_inserted = True
+            continue
+
+        # If we reach a message that usually follows records, and haven't inserted yet
+        if m_type in ("LapMessage", "SessionMessage", "ActivityMessage") and not records_inserted:
+            for stroke in csv_records:
+                builder.add(stroke_to_fit_record(stroke))
+            records_inserted = True
+
+        if m_type == "FileIdMessage":
+            new_msg = FileIdMessage()
+            new_msg.type = getattr(msg, "type", FileType.ACTIVITY)
+            new_msg.time_created = getattr(msg, "time_created", int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000))
+            new_msg.manufacturer = Manufacturer.GARMIN
+            new_msg.product = 3843
+            new_msg.serial_number = 123456789
+            builder.add(new_msg)
+
+        elif m_type == "SessionMessage" and msg == target_session:
+            new_s = rebuild_msg(msg, SessionMessage)
+            new_s.start_time = start_ms
+            new_s.timestamp = end_ms
+            new_s.total_elapsed_time = duration_s
+            new_s.total_timer_time = duration_s
+            
+            # We preserve existing summaries (avg power, HR, etc.) from the template
+            # as they represent SmartRow's official time-averaged calculations.
+            # We only ensure max values are at least as high as what we found in strokes.
+            if max_hr is not None:
+                orig_max_hr = getattr(new_s, "max_heart_rate", 0) or 0
+                new_s.max_heart_rate = max(orig_max_hr, max_hr)
+            
+            if max_spd is not None:
+                orig_max_spd = getattr(new_s, "enhanced_max_speed", 0.0) or 0.0
+                if max_spd > orig_max_spd:
+                    new_s.max_speed = max_spd
+                    new_s.enhanced_max_speed = max_spd
+
+            new_s.message_index = 0
+            builder.add(new_s)
+
+        elif m_type == "ActivityMessage":
+            new_a = rebuild_msg(msg, ActivityMessage)
+            new_a.timestamp = end_ms
+            new_a.num_sessions = 1
+            new_a.total_timer_time = duration_s
+            builder.add(new_a)
+
+        else:
+            # Preserve all other messages (Laps, Events, Workouts, etc.)
+            builder.add(msg)
+
+    # Final safety check if file had no records/sessions (unlikely)
+    if not records_inserted:
+        for stroke in csv_records:
+            builder.add(stroke_to_fit_record(stroke))
 
     builder.build().to_file(output_path)

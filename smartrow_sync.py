@@ -2,6 +2,8 @@
 
 import json
 from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
 
 from absl import logging
 from google.cloud import storage
@@ -144,8 +146,12 @@ def sync_smartrow_activities() -> None:
     if last_synced:
         logging.info("Last synced activity timestamp: %s", last_synced)
     else:
+        six_weeks_ago = datetime.now(timezone.utc) - timedelta(weeks=6)
+        # SmartRow times are usually ISO 8601 UTC like "YYYY-MM-DDTHH:MM:SSZ"
+        last_synced = six_weeks_ago.strftime("%Y-%m-%dT%H:%M:%SZ")
         logging.info(
-            "No prior sync state found. Will sync all available activities."
+            "No prior sync state found. Defaulting to sync activities from the last 6 weeks (since %s).",
+            last_synced,
         )
 
     client = SmartRowClient()

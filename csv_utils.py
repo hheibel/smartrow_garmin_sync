@@ -141,7 +141,6 @@ def parse_smartrow_csv(csv_bytes: bytes) -> list[CsvStrokeRecord]:
     required_cols = {
         "Stroke (#)",
         "Second (#)",
-        "Interval (#)",
         "Timestamp (UTC)",
         "Distance (m)",
         "Work (J)",

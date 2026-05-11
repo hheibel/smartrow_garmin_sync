@@ -633,8 +633,15 @@ def build_fit_from_csv(
             new_s = _rebuild_message(msg, SessionMessage)
             new_s.start_time = start_ms
             new_s.timestamp = end_ms
-            new_s.total_elapsed_time = duration_s
-            new_s.total_timer_time = duration_s
+            
+            # Preserve original exact duration if available, else fallback to timestamp bounds
+            if getattr(msg, "total_elapsed_time", None) is not None:
+                new_s.total_elapsed_time = msg.total_elapsed_time
+                new_s.total_timer_time = msg.total_timer_time
+            else:
+                new_s.total_elapsed_time = duration_s
+                new_s.total_timer_time = duration_s
+
             new_s.sport = Sport.ROWING
             new_s.sub_sport = SubSport.INDOOR_ROWING
 
@@ -663,7 +670,10 @@ def build_fit_from_csv(
             new_a = _rebuild_message(msg, ActivityMessage)
             new_a.timestamp = end_ms
             new_a.num_sessions = 1
-            new_a.total_timer_time = duration_s
+            if target_session and getattr(target_session, "total_timer_time", None) is not None:
+                new_a.total_timer_time = target_session.total_timer_time
+            else:
+                new_a.total_timer_time = duration_s
             builder.add(new_a)
 
         elif type(msg).__name__ in ("WorkoutMessage", "WorkoutStepMessage"):

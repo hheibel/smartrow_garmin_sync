@@ -236,6 +236,82 @@ class TestBuildFitFromCsv(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_fit_from_csv(self._sample_fit_path(), [], "dummy.fit")
 
+    def test_golden_reference_20260501(self) -> None:
+        csv_path = os.path.join(
+            os.path.dirname(__file__), "test_data", "20260501_065534_2756822.csv"
+        )
+        fit_path = os.path.join(
+            os.path.dirname(__file__), "test_data", "20260501_065534_2756822.fit"
+        )
+        out_path = os.path.join(
+            os.path.dirname(__file__), "test_data", "test_golden_20260501.fit"
+        )
+
+        with open(csv_path, "rb") as fh:
+            csv_records = parse_smartrow_csv(fh.read())
+
+        try:
+            build_fit_from_csv(fit_path, csv_records, out_path)
+            fit = read_fit_file(out_path)
+            session = next(
+                r.message
+                for r in fit.records
+                if type(r.message).__name__ == "SessionMessage"
+            )
+
+            # Time: 38:00 minutes
+            self.assertEqual(
+                getattr(session, "total_elapsed_time", None), 2280.0
+            )
+            self.assertEqual(getattr(session, "total_timer_time", None), 2280.0)
+            # Distance: 7589
+            self.assertEqual(getattr(session, "total_distance", None), 7589.0)
+            # Ave. HR 155
+            self.assertEqual(getattr(session, "avg_heart_rate", None), 155)
+            # Peak HR 189
+            self.assertEqual(getattr(session, "max_heart_rate", None), 189)
+        finally:
+            if os.path.exists(out_path):
+                os.remove(out_path)
+
+    def test_golden_reference_20260504(self) -> None:
+        csv_path = os.path.join(
+            os.path.dirname(__file__), "test_data", "20260504_095433_2759756.csv"
+        )
+        fit_path = os.path.join(
+            os.path.dirname(__file__), "test_data", "20260504_095433_2759756.fit"
+        )
+        out_path = os.path.join(
+            os.path.dirname(__file__), "test_data", "test_golden_20260504.fit"
+        )
+
+        with open(csv_path, "rb") as fh:
+            csv_records = parse_smartrow_csv(fh.read())
+
+        try:
+            build_fit_from_csv(fit_path, csv_records, out_path)
+            fit = read_fit_file(out_path)
+            session = next(
+                r.message
+                for r in fit.records
+                if type(r.message).__name__ == "SessionMessage"
+            )
+
+            # Time: 47:33:84
+            self.assertEqual(
+                getattr(session, "total_elapsed_time", None), 2853.84
+            )
+            self.assertEqual(getattr(session, "total_timer_time", None), 2853.84)
+            # Distance: 10000m
+            self.assertEqual(getattr(session, "total_distance", None), 10000.0)
+            # Ave. HR 154 (calculated directly from stroke data, user UI reference was 153)
+            self.assertEqual(getattr(session, "avg_heart_rate", None), 154)
+            # Peak HR 175
+            self.assertEqual(getattr(session, "max_heart_rate", None), 175)
+        finally:
+            if os.path.exists(out_path):
+                os.remove(out_path)
+
 
 if __name__ == "__main__":
     unittest.main()
